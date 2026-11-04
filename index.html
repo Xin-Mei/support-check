@@ -51,12 +51,26 @@ button:disabled { opacity: .45; cursor: default; }
 .sysfile .ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: var(--soft); color: var(--muted); }
 .sysfile.ok .ic { background: var(--ok-bg); color: var(--ok); }
 .sysfile b { font-size: 16px; }
-.tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
-.tile { border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; background: var(--bg); }
-.tile b { display: block; font-size: 16px; }
-.tile span { font-size: 12px; color: var(--muted); }
-.tile.ok { background: #fff; border-color: #BFD8CC; } .tile.ok span { color: var(--ok); font-weight: 700; }
-.tile.need span { color: var(--bad); font-weight: 700; }
+.suphead { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.suphead h2 { margin: 0; white-space: nowrap; }
+.prog { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: hidden; }
+.prog i { display: block; height: 100%; border-radius: 99px; background: var(--ok); transition: width .3s; }
+.cnt { white-space: nowrap; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cnt b { font-size: 20px; color: var(--brand); margin-right: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.tile { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15px; }
+.tile .dt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #D3CBC1; }
+.tile small { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.tile.ok { border: 1px solid transparent; background: var(--ok-bg); color: var(--ok); font-weight: 700; }
+.tile.ok .dt { display: none; }
+.tile.need { border: 1px solid #E3CFA6; background: #fff; color: var(--ink); font-weight: 700; }
+.tile.need .dt { background: var(--warn); } .tile.need small { color: var(--warn); }
+.tile.none { opacity: .5; }
+.legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+.legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.legend .l1::before { background: var(--ok-bg); border: 1px solid #BFD8CC; }
+.legend .l2::before { background: #fff; border: 1px solid #E3CFA6; }
+.legend .l3::before { border: 1px dashed #DCD5CC; }
 /* 步驟 2：結果 */
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
 .kpi { margin: 0; padding: 16px 18px; }
@@ -142,8 +156,9 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
       <div class="sysfile" id="sysBox"><span class="ic">?</span><div><b>還沒有</b><div class="hint">醫師看診時間_健保_11509.xlsx 這種檔</div></div></div>
     </div>
     <div class="card">
-      <h2>報備檔 <span class="hint" id="supHint"></span></h2>
+      <div class="suphead"><h2>各院區報備檔</h2><div class="prog"><i id="supBar" style="width:0"></i></div><span class="cnt" id="supHint"></span></div>
       <div class="tiles" id="tiles"></div>
+      <div class="legend" id="legend" hidden><span class="l1">已上傳</span><span class="l2">這月有支援、還缺</span><span class="l3">這月沒支援</span></div>
     </div>
   </section>
 
@@ -194,7 +209,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-04 14:57';
+const APP_VERSION = '2026-11-04 16:27';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
@@ -414,10 +429,14 @@ function renderUpload() {
   const need = R ? new Set(R.sites) : new Set();
   $('tiles').innerHTML = SITE_ORDER.concat(Object.keys(sups).filter(s => !SITE_ORDER.includes(s))).map(s => {
     const S = sups[s];
-    if (S) return `<div class="tile ok"><b>${s}</b><span>✓ ${S.rows.size} 筆</span></div>`;
-    return `<div class="tile${need.has(s) ? ' need' : ''}"><b>${s}</b><span>${need.has(s) ? '還沒有' : sys ? '這月沒支援' : '還沒有'}</span></div>`;
+    if (S) return `<div class="tile ok">✓ ${s}<small>${S.rows.size} 筆</small></div>`;
+    if (need.has(s)) return `<div class="tile need"><i class="dt"></i>${s}<small>還缺</small></div>`;
+    return `<div class="tile${sys ? ' none' : ''}"><i class="dt"></i>${s}</div>`;
   }).join('');
-  $('supHint').textContent = `${Object.keys(sups).length} / ${SITE_ORDER.length} 院區`;
+  const n = Object.keys(sups).length;
+  $('supHint').innerHTML = `<b>${n}</b>/ ${SITE_ORDER.length} 院區`;
+  $('supBar').style.width = Math.min(100, n / SITE_ORDER.length * 100) + '%';
+  $('legend').hidden = !sys;
 }
 
 function renderResult() {
