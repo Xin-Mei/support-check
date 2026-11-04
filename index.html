@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>報備支援核對</title>
+<link rel="icon" href="favicon.png">
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/exceljs.min.js"></script>
+<style>
+/* 奶茶色：跟「專案進度報告」同一組色票 */
+:root {
+  --bg: #F7F5F2; --card: #fff; --ink: #3E3830; --muted: #857868; --line: #E0DCD7; --line-soft: #EEEBE7;
+  --brand: #514A40; --brand-2: #8C7B67; --soft: #F3EFEA; --hover: #F9F7F4;
+  --ok: #2F6B58; --ok-bg: #D5E8DF; --bad: #9A5A4C; --bad-bg: #F1D9D2; --warn: #9B6B1E; --warn-bg: #F6E9CF; --gold: #E8B54A;
+  --r: 16px; --shadow: 0 1px 2px rgba(81,74,64,.05), 0 6px 18px rgba(81,74,64,.06);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header .in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand img { width: 44px; height: 44px; border-radius: 50%; }
+.brand .t1 { font-size: 12px; letter-spacing: .14em; color: var(--muted); }
+.brand .t2 { font-weight: 900; font-size: 21px; letter-spacing: .04em; line-height: 1.2; color: var(--brand); }
+/* 步驟列 */
+.stepper { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.st { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); padding: 6px 10px; border-radius: 99px; cursor: pointer; }
+.st:disabled { cursor: default; opacity: .55; }
+.st i { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); font: 700 13px/1 'Segoe UI', Arial, sans-serif; color: var(--muted); background: #fff; }
+.st.on { color: var(--brand); font-weight: 700; } .st.on i { background: var(--brand); border-color: var(--brand); color: #fff; }
+.st.done i { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok); }
+.stepper .sep { width: 26px; height: 2px; background: var(--line); }
+main { max-width: 1180px; margin: 0 auto; padding: 26px 24px 120px; }
+.page { display: none; } .page.on { display: block; }
+h1 { font-size: 22px; margin: 0 0 4px; color: var(--brand); letter-spacing: .03em; }
+.lead { color: var(--muted); margin: 0 0 18px; }
+h2 { font-size: 17px; margin: 0 0 12px; color: var(--brand); letter-spacing: .03em; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); }
+button.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 8px 16px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer; }
+button.btn:hover { border-color: var(--brand-2); background: var(--hover); }
+button.primary { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 700; }
+button.primary:hover { background: #3F3931; border-color: #3F3931; }
+button:disabled { opacity: .45; cursor: default; }
+.drop { border: 2px dashed #CFC6BB; border-radius: var(--r); padding: 36px; text-align: center; background: var(--card); cursor: pointer; transition: .15s; }
+.drop.hover { border-color: var(--brand); background: var(--soft); }
+.drop b { font-size: 19px; font-weight: 900; display: block; margin-bottom: 4px; color: var(--brand); }
+.drop span { color: var(--muted); font-size: 13px; }
+/* 步驟 1：檔案狀態 */
+.sysfile { display: flex; align-items: center; gap: 14px; }
+.sysfile .ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: var(--soft); color: var(--muted); }
+.sysfile.ok .ic { background: var(--ok-bg); color: var(--ok); }
+.sysfile b { font-size: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; background: var(--bg); }
+.tile b { display: block; font-size: 16px; }
+.tile span { font-size: 12px; color: var(--muted); }
+.tile.ok { background: #fff; border-color: #BFD8CC; } .tile.ok span { color: var(--ok); font-weight: 700; }
+.tile.need span { color: var(--bad); font-weight: 700; }
+/* 步驟 2：結果 */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.kpi { margin: 0; padding: 16px 18px; }
+.kpi .l { font-size: 13px; color: var(--muted); }
+.kpi .v { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.kpi .s { font-size: 12px; color: var(--muted); }
+.kpi.hero { background: var(--brand); border-color: transparent; color: #fff; } .kpi.hero .l, .kpi.hero .s { color: #D6CDC2; }
+.kpi.bad .v { color: var(--bad); } .kpi.warn .v { color: var(--warn); } .kpi.ok .v { color: var(--ok); }
+.warns { border-left: 5px solid var(--gold); }
+.warns li { margin: 3px 0; font-size: 14px; }
+.sites { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.site { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 14px; cursor: pointer; font: inherit; font-size: 14px; color: var(--ink); }
+.site .c { display: inline-block; min-width: 20px; margin-left: 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 99px; padding: 0 6px; text-align: center; }
+.site .c.zero { background: var(--ok-bg); color: var(--ok); }
+.site .c.nofile { background: var(--soft); color: var(--muted); }
+.site.on { border-color: var(--brand); background: var(--brand); color: #fff; font-weight: 700; }
+.docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 14px; }
+.doc { margin: 0; padding: 16px 18px; }
+.doc .dh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.doc .dh b { font-size: 17px; font-weight: 900; }
+.doc .dh .s { color: var(--muted); font-size: 13px; }
+.doc .dh .n { margin-left: auto; font-size: 12.5px; color: var(--bad); font-weight: 700; }
+.ln { display: grid; grid-template-columns: 82px 1fr auto; gap: 2px 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+.ln .d { font-weight: 700; }
+.ln .g { font-weight: 700; color: var(--bad); }
+.ln .why { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+.ln .why input { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; width: 220px; margin-left: 6px; }
+.ln.off .d, .ln.off .g { color: #B3AAA0; text-decoration: line-through; font-weight: 500; }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 1px 9px; border-radius: 999px; background: var(--bad-bg); color: var(--bad); white-space: nowrap; }
+.tag.warn { background: var(--warn-bg); color: var(--warn); }
+.tag.mute { background: var(--soft); color: var(--muted); }
+.skip { border: 1px solid var(--line); background: #fff; border-radius: 99px; font: inherit; font-size: 12px; padding: 1px 10px; cursor: pointer; color: var(--muted); }
+.skip:hover { border-color: var(--brand-2); color: var(--brand); }
+.ln.off .skip { background: var(--soft); color: var(--brand); }
+.empty { text-align: center; color: var(--ok); font-weight: 700; padding: 28px; }
+textarea.out { width: 100%; min-height: 220px; font: 15px/1.7 "Noto Sans TC", "Microsoft JhengHei", sans-serif; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); resize: vertical; color: var(--ink); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: 13px; }
+/* 步驟 3：存紀錄 */
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+table.t th { text-align: center; color: var(--muted); font-weight: 500; font-size: 12.5px; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.t td { padding: 7px 6px; border-bottom: 1px solid var(--line-soft); text-align: center; }
+table.t td:first-child, table.t th:first-child { text-align: left; }
+table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: var(--ok); } table.t td.mute { color: #B3AAA0; }
+.cloud { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
+.dot.ok { background: var(--ok); }
+.cloud input { font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; width: 220px; }
+.saved { color: var(--ok); font-weight: 700; }
+.wrap { overflow-x: auto; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 24px; z-index: 5; box-shadow: 0 -6px 20px rgba(81,74,64,.05); }
+.bar .in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+.bar .sum { color: var(--muted); font-size: 14px; }
+.bar .sp { flex: 1; }
+.bar .primary { padding: 10px 24px; border-radius: 12px; font-size: 15px; }
+.toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 12px; font-size: 14px; z-index: 20; opacity: 0; transition: .2s; pointer-events: none; max-width: 80vw; }
+.toast.on { opacity: 1; }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } .tiles { grid-template-columns: repeat(4, 1fr); } .docs { grid-template-columns: 1fr; } .stepper .lb { display: none; } }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <div class="brand"><img src="logo.png" alt="金鶯診所"><div><div class="t1">金鶯診所 ELITE CLINIC<span id="verTag"></span></div><div class="t2">報備支援核對</div></div></div>
+  <nav class="stepper">
+    <button class="st on" data-p="1"><i>1</i><span class="lb">上傳檔案</span></button><span class="sep"></span>
+    <button class="st" data-p="2" disabled><i>2</i><span class="lb">看結果</span></button><span class="sep"></span>
+    <button class="st" data-p="3" disabled><i>3</i><span class="lb">存紀錄</span></button>
+  </nav>
+</div></header>
+
+<main>
+  <!-- ① 上傳 -->
+  <section class="page on" id="p1">
+    <h1>① 上傳檔案</h1>
+    <p class="lead">把資訊長撈的系統時數檔，和各院區下載的報備檔一起拖進來（可以分幾次拖）。</p>
+    <div class="drop" id="drop">
+      <b>把檔案拖進來</b>
+      <span>或點這裡選檔 ・ 報備檔名稱一樣沒關係，會看檔案裡的「支援機構名稱」認院區</span>
+      <input type="file" id="pick" multiple accept=".xlsx,.xls" hidden>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>系統時數檔</h2>
+      <div class="sysfile" id="sysBox"><span class="ic">?</span><div><b>還沒有</b><div class="hint">醫師看診時間_健保_11509.xlsx 這種檔</div></div></div>
+    </div>
+    <div class="card">
+      <h2>報備檔 <span class="hint" id="supHint"></span></h2>
+      <div class="tiles" id="tiles"></div>
+    </div>
+  </section>
+
+  <!-- ② 結果 -->
+  <section class="page" id="p2">
+    <h1>② 看結果</h1>
+    <p class="lead">紅字＝沒被核准的時段。不用報備的（例如補登的單筆）按「不用報備」並寫原因。</p>
+    <div class="kpis" id="kpis"></div>
+    <div class="card warns" id="warns" style="display:none"></div>
+    <div class="sites" id="sites"></div>
+    <div id="view"></div>
+    <div class="card" style="margin-top:14px">
+      <div class="row" style="margin-bottom:10px"><h2 style="margin:0">複製用文字</h2><span class="hint" id="outHint"></span><span style="flex:1"></span><button class="btn" id="copyBtn">複製文字</button></div>
+      <textarea class="out" id="out" readonly></textarea>
+    </div>
+  </section>
+
+  <!-- ③ 存紀錄 -->
+  <section class="page" id="p3">
+    <h1>③ 存紀錄</h1>
+    <p class="lead">存到雲端試算表「報備支援核對紀錄」：一個院區一頁，每個月累積下去。同一個月重新核對再存，會換成新的，不會重複。</p>
+    <div class="card">
+      <div class="cloud" id="cloudBox"></div>
+    </div>
+    <div class="card">
+      <h2 id="thisTitle">這次要存的</h2>
+      <div class="wrap"><table class="t" id="thisTable"></table></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" id="saveCloud">存到雲端</button>
+        <button class="btn" id="saveXlsx">另外下載 Excel</button>
+        <span id="savedMsg"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px"><h2 style="margin:0">歷月紀錄（待補報備天數）</h2><span style="flex:1"></span><a id="sheetLink" class="hint" target="_blank" rel="noopener">打開雲端試算表 ↗</a></div>
+      <div class="wrap"><table class="t" id="histTable"><tr><td class="hint">連上雲端後會顯示</td></tr></table></div>
+    </div>
+  </section>
+</main>
+
+<div class="bar"><div class="in">
+  <span class="sum" id="sum">還沒有檔案</span>
+  <span class="sp"></span>
+  <button class="btn" id="backBtn" style="display:none">← 上一步</button>
+  <button class="btn" id="clearBtn">清除重來</button>
+  <button class="btn primary" id="nextBtn" disabled>下一步 →</button>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const APP_VERSION = '2026-11-04 14:57';
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
+if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
+const $ = id => document.getElementById(id);
+const toast = (t, ms = 2800) => { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove('on'), ms); };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+// ---------- 狀態 ----------
+let sys = null;            // { name, y, m, visits, sites }
+const sups = {};           // 院區 -> { files: Set, rows: Map }
+let page = 1, curSite = '全部';
+const SITE_ORDER = ['鶯歌', '三樹', '桃園', '土城', '八德', '龍潭', '大溪', '大竹', '大湳', '平鎮', '埔心', '觀音', '龍岡', '樹林'];
+const bySite = (a, b) => (SITE_ORDER.indexOf(a) + 1 || 99) - (SITE_ORDER.indexOf(b) + 1 || 99);
+
+// 「大溪金鶯診所」→大溪、「大溪院區」→大溪；只寫「金鶯診所」的是桃園（總院）
+const siteOf = s => String(s || '').replace(/\s/g, '').replace(/金鶯診所$/, '').replace(/院區$/, '') || '桃園';
+const hhmm = t => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+const fm = x => { x = ((x % 1440) + 1440) % 1440; return Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0'); };
+const dayAbs = (y, m, d) => Date.UTC(y + 1911, m - 1, d) / 60000;   // 民國年月日 → 分鐘
+const seg = (a, b) => a === b ? fm(a) : fm(a) + '-' + fm(b);
+const ymText = () => `${sys.y}/${String(sys.m).padStart(2, '0')}`;
+
+// 報備檔的「11509011830星期二」→ 絕對分鐘
+function supTime(s) {
+  const m = String(s || '').match(/(\d{3})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  return m ? dayAbs(+m[1], +m[2], +m[3]) + +m[4] * 60 + +m[5] : null;
+}
+// 報備檔姓名中間是 *：廖*竹 對 廖崑竹；兩個字的 尤* 對 尤騰
+function maskMatch(masked, name) {
+  const m = String(masked || '').replace(/\s/g, '').replace(/[＊○〇Ｏ]/g, '*');
+  if (!m || !name) return false;
+  if (m === name) return true;
+  if (m.length === name.length) return [...m].every((c, i) => c === '*' || c === name[i]);
+  return m[0] === name[0] && (m.at(-1) === '*' || m.at(-1) === name.at(-1));
+}
+
+// ---------- 讀檔 ----------
+const drop = $('drop');
+drop.onclick = () => $('pick').click();
+$('pick').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add('hover'); }));
+['dragleave', 'drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === 'drop' || e.target === drop) drop.classList.remove('hover'); }));
+document.addEventListener('drop', e => { addFiles([...e.dataTransfer.files]); if (page !== 1) go(1); });
+
+async function addFiles(files) {
+  const msgs = [];
+  const oldYm = sys && ymText();
+  for (const f of files) {
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      if (wb.SheetNames.includes('明細')) { readSystem(f.name, wb); msgs.push(`系統時數檔：${sys.y} 年 ${sys.m} 月`); continue; }
+      const got = readSupport(f.name, wb);
+      if (got) { msgs.push(`報備檔：${got.join('、')}`); continue; }
+      msgs.push(`看不懂：${f.name}（不是系統時數檔，也找不到「支援機構名稱」欄）`);
+    } catch (err) { msgs.push(`讀不了：${f.name}（${err.message}）`); }
+  }
+  toast(msgs.join('　'), 4000);
+  if (sys && ymText() !== oldYm) await loadCloudNotes();
+  render();
+}
+
+function rowsOf(ws) { return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }); }
+function colMap(header, names) {
+  const idx = {};
+  for (const [k, alts] of Object.entries(names)) idx[k] = header.findIndex(h => alts.some(a => String(h).replace(/\s/g, '') === a));
+  return idx;
+}
+
+function readSystem(name, wb) {
+  const R = rowsOf(wb.Sheets['明細']);
+  const c = colMap(R[0], { site: ['院區'], date: ['日期'], wd: ['星期'], doc: ['醫師'], role: ['身分'], sess: ['診次'], a: ['第一筆完診'], b: ['最後一筆完診'], n: ['人次'] });
+  if (c.site < 0 || c.doc < 0 || c.a < 0 || c.b < 0) throw new Error('明細的欄位名稱跟以前不一樣');
+  const visits = [], ym = {};
+  for (const r of R.slice(1)) {
+    const dm = String(r[c.date]).match(/(\d{2,3})\D(\d{1,2})\D(\d{1,2})/);
+    const a = hhmm(r[c.a]), b = hhmm(r[c.b]);
+    if (!dm || a == null || b == null || !r[c.doc]) continue;
+    const y = +dm[1], m = +dm[2], d = +dm[3];
+    ym[y + '/' + m] = (ym[y + '/' + m] || 0) + 1;
+    const base = dayAbs(y, m, d);
+    visits.push({ site: siteOf(r[c.site]), doc: String(r[c.doc]).trim(), role: String(r[c.role]).trim(), sess: r[c.sess], y, m, d, wd: r[c.wd],
+      a: base + a, b: base + (b < a ? b + 1440 : b), n: +r[c.n] || 0 });
+  }
+  const [y, m] = Object.entries(ym).sort((p, q) => q[1] - p[1])[0][0].split('/').map(Number);
+  sys = { name, y, m, visits, sites: wb.SheetNames.filter(s => s.endsWith('院區')).map(siteOf) };
+}
+
+function readSupport(name, wb) {
+  const got = new Set();
+  for (const sn of wb.SheetNames) {
+    const R = rowsOf(wb.Sheets[sn]);
+    const hi = R.slice(0, 8).findIndex(r => r.some(v => String(v).includes('支援機構名稱')));
+    if (hi < 0) continue;
+    const c = colMap(R[hi], { id: ['案件編號'], kind: ['案件類別'], ok: ['核準日期', '核准日期'], name: ['姓名'], s: ['支援開始時間'], e: ['支援結束時間'], to: ['支援機構名稱'] });
+    for (const r of R.slice(hi + 1)) {
+      const s = supTime(r[c.s]), e = supTime(r[c.e]);
+      if (s == null || e == null || !r[c.name]) continue;
+      const site = siteOf(r[c.to]);
+      const row = { site, id: r[c.id], kind: String(r[c.kind] || '').trim(), ok: String(r[c.ok] || '').trim(), name: String(r[c.name]).trim(), s, e };
+      const S = sups[site] ||= { files: new Set(), rows: new Map() };
+      S.files.add(name);
+      S.rows.set([row.id, row.name, row.s, row.e].join('|'), row);   // 同一份拖兩次不會重複
+      got.add(site);
+    }
+  }
+  return got.size ? [...got] : null;
+}
+
+// 有效的報備：要有核准日期，而且不是取消／撤銷／註銷
+const valid = r => r.ok && !/取消|撤銷|註銷|撤回|退件/.test(r.kind);
+
+// ---------- 比對 ----------
+const NOTE_KEY = 'baobei-notes-v1';
+let notes = {};
+try { notes = JSON.parse(ls.get(NOTE_KEY) || '{}'); } catch { notes = {}; }
+const saveNotes = () => ls.set(NOTE_KEY, JSON.stringify(notes));
+
+function compute() {
+  const warns = [], out = [];
+  const visits = sys.visits.filter(v => v.role === '支援' && v.y === sys.y && v.m === sys.m);
+  const supDocs = {};
+  for (const v of visits) (supDocs[v.site] ||= new Set()).add(v.doc);
+  const m0 = dayAbs(sys.y, sys.m, 1), m1 = dayAbs(sys.m === 12 ? sys.y + 1 : sys.y, sys.m % 12 + 1, 1);
+  for (const [site, S] of Object.entries(sups)) {
+    for (const mk of new Set([...S.rows.values()].map(r => r.name))) {
+      const hit = [...(supDocs[site] || [])].filter(d => maskMatch(mk, d));
+      if (hit.length > 1) warns.push(`${site}：報備檔的「${mk}」同時對得上 ${hit.join('、')}，請人工確認`);
+    }
+    if (![...S.rows.values()].some(r => r.e > m0 && r.s < m1)) warns.push(`${site}：報備檔裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？（${site}的結果先不要用）`);
+    const bad = [...S.rows.values()].filter(r => !valid(r));
+    if (bad.length) warns.push(`${site}：有 ${bad.length} 筆報備沒有核准日期或是取消，不算數（${[...new Set(bad.map(r => r.kind || '沒核准'))].join('、')}）`);
+    if (sys.sites.length && !sys.sites.includes(site)) warns.push(`報備檔的院區「${site}」在系統時數檔裡找不到`);
+  }
+  for (const v of visits) {
+    const S = sups[v.site];
+    const res = { ...v, status: '', gaps: [], wins: [] };
+    if (!S) { res.status = '沒有報備檔'; out.push(res); continue; }
+    const day0 = dayAbs(v.y, v.m, v.d);
+    res.wins = [...S.rows.values()].filter(r => valid(r) && maskMatch(r.name, v.doc) && r.e > day0 && r.s < day0 + 1440).map(r => [r.s, r.e]).sort((p, q) => p[0] - q[0]);
+    let cur = v.a;
+    for (const [s, e] of res.wins) {
+      if (e < cur || s > v.b) continue;
+      if (s > cur) res.gaps.push([cur, s]);
+      cur = Math.max(cur, e);
+    }
+    if (v.a === v.b) { if (!res.wins.some(([s, e]) => s <= v.a && v.a <= e)) res.gaps.push([v.a, v.a]); }
+    else if (cur < v.b) res.gaps.push([cur, v.b]);
+    if (!res.gaps.length) res.status = '已涵蓋';
+    else if (v.n <= 1 || v.a === v.b) res.status = '零星單筆';
+    else if (!res.wins.some(([s, e]) => e >= v.a && s <= v.b)) res.status = '整段沒報備';
+    else res.status = '超出核准時間';
+    out.push(res);
+  }
+  const sites = [...new Set(visits.map(v => v.site))].sort(bySite);
+  return { out, warns, sites, noFile: sites.filter(s => !sups[s]) };
+}
+
+// 同一位醫師同一天的缺口合成一行
+function missLines(out) {
+  const map = new Map();
+  for (const r of out) {
+    if (!r.gaps.length) continue;
+    const k = [r.site, r.doc, r.m, r.d].join('|');
+    const L = map.get(k) || { site: r.site, doc: r.doc, m: r.m, d: r.d, wd: r.wd, gaps: [], parts: [], types: new Set() };
+    L.gaps.push(...r.gaps); L.parts.push(r); L.types.add(r.status);
+    map.set(k, L);
+  }
+  const lines = [...map.values()];
+  for (const L of lines) {
+    L.gaps.sort((p, q) => p[0] - q[0]);
+    L.gapText = L.gaps.map(g => seg(g[0], g[1])).join('、');
+    L.key = [sys.y, sys.m, L.site, L.doc, L.d, L.gapText].join('|');
+    L.type = L.types.has('整段沒報備') ? '整段沒報備' : L.types.has('超出核准時間') ? '超出核准時間' : '零星單筆';
+    L.act = L.parts.map(p => `${seg(p.a, p.b)}（${p.n} 人次）`).join('、');
+    L.winText = [...new Set(L.parts.flatMap(p => p.wins.map(w => seg(w[0], w[1]))))].join('、');
+    L.text = `${L.m}/${L.d} (${L.wd}) ${L.gapText}` + (L.type === '零星單筆' ? `（${L.parts.reduce((s, p) => s + p.n, 0)} 人次）` : '');
+    const n = notes[L.key];
+    L.skip = !!(n && n.skip); L.why = (n && n.why) || '';
+  }
+  return lines.sort((p, q) => bySite(p.site, q.site) || p.doc.localeCompare(q.doc, 'zh-Hant') || p.d - q.d);
+}
+
+// ---------- 畫面 ----------
+let R = null, LINES = [];
+function go(p) { page = p; render(); window.scrollTo(0, 0); }
+document.querySelectorAll('.st').forEach(b => b.onclick = () => go(+b.dataset.p));
+$('nextBtn').onclick = () => go(page + 1);
+$('backBtn').onclick = () => go(page - 1);
+$('clearBtn').onclick = () => { sys = null; for (const k of Object.keys(sups)) delete sups[k]; curSite = '全部'; go(1); };
+
+function render() {
+  if (sys) { R = compute(); LINES = missLines(R.out); } else { R = null; LINES = []; }
+  if (!sys && page > 1) page = 1;
+  document.querySelectorAll('.page').forEach(s => s.classList.toggle('on', s.id === 'p' + page));
+  document.querySelectorAll('.st').forEach(b => {
+    const p = +b.dataset.p;
+    b.classList.toggle('on', p === page); b.classList.toggle('done', p < page);
+    b.disabled = p > 1 && !sys;
+  });
+  $('backBtn').style.display = page > 1 ? '' : 'none';
+  $('nextBtn').style.display = page < 3 ? '' : 'none';
+  $('nextBtn').disabled = !sys;
+  $('nextBtn').textContent = page === 1 ? '下一步：看結果 →' : '下一步：存紀錄 →';
+  $('sum').textContent = sys ? `${sys.y} 年 ${sys.m} 月 ・ 報備檔 ${Object.keys(sups).length} 個院區` + (R && R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '') : '還沒有系統時數檔';
+  if (page === 1) renderUpload();
+  if (page === 2) renderResult();
+  if (page === 3) renderSave();
+}
+
+function renderUpload() {
+  const box = $('sysBox');
+  box.className = 'sysfile' + (sys ? ' ok' : '');
+  box.innerHTML = sys
+    ? `<span class="ic">✓</span><div><b>${sys.y} 年 ${sys.m} 月</b><div class="hint">${esc(sys.name)} ・ 支援看診 ${R.out.length} 節</div></div>`
+    : `<span class="ic">?</span><div><b>還沒有</b><div class="hint">醫師看診時間_健保_11509.xlsx 這種檔</div></div>`;
+  const need = R ? new Set(R.sites) : new Set();
+  $('tiles').innerHTML = SITE_ORDER.concat(Object.keys(sups).filter(s => !SITE_ORDER.includes(s))).map(s => {
+    const S = sups[s];
+    if (S) return `<div class="tile ok"><b>${s}</b><span>✓ ${S.rows.size} 筆</span></div>`;
+    return `<div class="tile${need.has(s) ? ' need' : ''}"><b>${s}</b><span>${need.has(s) ? '還沒有' : sys ? '這月沒支援' : '還沒有'}</span></div>`;
+  }).join('');
+  $('supHint').textContent = `${Object.keys(sups).length} / ${SITE_ORDER.length} 院區`;
+}
+
+function renderResult() {
+  const sup = R.out, ok = sup.filter(r => r.status === '已涵蓋').length;
+  const live = LINES.filter(l => !l.skip);
+  const docDays = live.filter(l => l.type !== '零星單筆').length, single = live.filter(l => l.type === '零星單筆').length;
+  $('kpis').innerHTML = `
+    <div class="card kpi hero"><div class="l">${sys.y} 年 ${sys.m} 月 支援看診</div><div class="v">${sup.length}</div><div class="s">節（健保）</div></div>
+    <div class="card kpi ok"><div class="l">報備有涵蓋</div><div class="v">${ok}</div><div class="s">節</div></div>
+    <div class="card kpi bad"><div class="l">要補報備</div><div class="v">${docDays}</div><div class="s">醫師・天</div></div>
+    <div class="card kpi warn"><div class="l">零星單筆待確認</div><div class="v">${single}</div><div class="s">只有 1 人次，可能是補登</div></div>`;
+  const w = [...R.warns];
+  if (R.noFile.length) w.unshift(`還沒拖報備檔：${R.noFile.join('、')}（這些院區的 ${sup.filter(r => r.status === '沒有報備檔').length} 節還沒比對）`);
+  $('warns').style.display = w.length ? '' : 'none';
+  $('warns').innerHTML = `<h2>要注意</h2><ul>${w.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  if (curSite !== '全部' && !R.sites.includes(curSite)) curSite = '全部';
+  const cnt = s => LINES.filter(l => !l.skip && (s === '全部' || l.site === s)).length;
+  $('sites').innerHTML = ['全部', ...R.sites].map(s => {
+    const nf = s !== '全部' && !sups[s], c = cnt(s);
+    return `<button class="site${s === curSite ? ' on' : ''}" data-s="${s}">${s}<span class="c ${nf ? 'nofile' : c ? '' : 'zero'}">${nf ? '沒檔' : c || '✓'}</span></button>`;
+  }).join('');
+  $('sites').querySelectorAll('.site').forEach(b => b.onclick = () => { curSite = b.dataset.s; renderResult(); });
+
+  const show = curSite === '全部' ? R.sites : [curSite];
+  let html = '';
+  for (const s of show) {
+    const L = LINES.filter(l => l.site === s), nf = !sups[s];
+    if (curSite === '全部' && !L.length) continue;
+    html += `<h2 style="margin:18px 0 10px">${s}${nf ? ' <span class="tag mute">還沒拖報備檔</span>' : ''}</h2>`;
+    if (nf) {
+      const docs = [...new Set(R.out.filter(r => r.site === s).map(r => r.doc))];
+      html += `<div class="card hint">這個月有 ${docs.length} 位支援醫師：${docs.join('、')}。回到 ① 把${s}的報備檔拖進來才能比對。</div>`;
+      continue;
+    }
+    if (!L.length) { html += `<div class="card empty">${s}的支援看診都有報備 ✓</div>`; continue; }
+    html += '<div class="docs">';
+    for (const doc of [...new Set(L.map(l => l.doc))]) {
+      const D = L.filter(l => l.doc === doc);
+      html += `<div class="card doc"><div class="dh"><b>${esc(doc)}醫師</b><span class="s">支援${s}</span><span class="n">${D.filter(l => !l.skip).length} 天</span></div>`;
+      for (const l of D) {
+        const tag = l.type === '整段沒報備' ? '<span class="tag">整段沒報備</span>' : l.type === '超出核准時間' ? '<span class="tag warn">超出核准時間</span>' : '<span class="tag mute">零星單筆</span>';
+        html += `<div class="ln${l.skip ? ' off' : ''}" data-i="${LINES.indexOf(l)}">
+          <span class="d">${l.m}/${l.d} (${esc(l.wd)})</span><span class="g">${l.gapText}</span>
+          <span>${tag} <button class="skip">${l.skip ? '改回要報備' : '不用報備'}</button></span>
+          <span class="why">實際看診 ${l.act}；${l.winText ? '有報備 ' + l.winText : '當天沒有報備'}${l.skip ? `<input placeholder="不用報備的原因" value="${esc(l.why)}">` : ''}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  if (!html) html = `<div class="card empty">${Object.keys(sups).length ? '拖進來的院區都有報備 ✓' : '回到 ① 把各院區的報備檔拖進來就會開始比對'}</div>`;
+  $('view').innerHTML = html;
+  $('view').querySelectorAll('.ln').forEach(el => {
+    const l = LINES[+el.dataset.i];
+    el.querySelector('.skip').onclick = () => { notes[l.key] = { skip: !l.skip, why: l.why }; saveNotes(); render(); };
+    const inp = el.querySelector('input');
+    if (inp) inp.oninput = () => { notes[l.key] = { skip: true, why: inp.value }; l.why = inp.value; saveNotes(); };
+  });
+  const t = textFor(curSite);
+  $('out').value = t || '（沒有要補報備的）';
+  $('outHint').textContent = curSite === '全部' ? '全部院區' : curSite;
+}
+
+function textFor(site) {
+  const L = LINES.filter(l => !l.skip && (site === '全部' || l.site === site));
+  const blocks = [];
+  for (const s of [...new Set(L.map(l => l.site))]) for (const doc of [...new Set(L.filter(l => l.site === s).map(l => l.doc))]) {
+    blocks.push(`${s} ${doc}醫師\n` + L.filter(l => l.site === s && l.doc === doc).map(l => l.text).join('\n'));
+  }
+  return blocks.join('\n\n');
+}
+$('copyBtn').onclick = async () => {
+  const t = textFor(curSite);
+  if (!t) return toast('沒有要補報備的');
+  try { await navigator.clipboard.writeText(t); } catch { $('out').select(); document.execCommand('copy'); }
+  toast(`已複製${curSite === '全部' ? '全部院區' : curSite}的清單`);
+};
+
+// ---------- 每院區統計（存雲端、Excel 共用）----------
+function siteSummary() {
+  return R.sites.map(s => {
+    const o = R.out.filter(r => r.site === s), L = LINES.filter(l => l.site === s);
+    const has = !!sups[s];
+    return { s, has, n: o.length, ok: o.filter(r => r.status === '已涵蓋').length,
+      miss: L.filter(l => !l.skip && l.type !== '零星單筆').length, single: L.filter(l => !l.skip && l.type === '零星單筆').length, skip: L.filter(l => l.skip).length };
+  });
+}
+const lineRow = l => [l.site, l.doc, `${l.m}/${l.d}`, l.wd, l.gapText, l.type, l.act, l.winText || '（沒有）', l.skip ? '不用報備' : '待補報備', l.why, l.key];
+
+// ---------- 雲端 ----------
+const TOKEN_KEY = 'baobei-cloud-token';
+let cloudOk = false, history = null, savedAt = '';
+const cloudReady = () => !CLOUD_URL.startsWith('__') && !!ls.get(TOKEN_KEY);
+async function cloud(type, body = {}) {
+  const r = await fetch(CLOUD_URL, { method: 'POST', body: JSON.stringify({ token: ls.get(TOKEN_KEY), type, ...body }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || '雲端沒有回應');
+  return j;
+}
+async function ping() {
+  if (!cloudReady()) { cloudOk = false; return; }
+  try { const j = await cloud('ping'); cloudOk = true; history = j.summary; }
+  catch (e) { cloudOk = false; toast('雲端連不上：' + e.message, 4000); }
+}
+async function loadCloudNotes() {
+  if (!cloudReady()) return;
+  try { const j = await cloud('load', { ym: ymText() }); Object.assign(notes, j.notes); saveNotes(); } catch {}
+}
+
+function renderCloudBox() {
+  const box = $('cloudBox');
+  if (CLOUD_URL.startsWith('__')) { box.innerHTML = '<span class="dot"></span><span>雲端還沒設定好（網頁裡缺 Apps Script 網址）</span>'; return; }
+  if (cloudOk) { box.innerHTML = '<span class="dot ok"></span><span>雲端已連線</span><span style="flex:1"></span><button class="btn" id="pwChange">換雲端密碼</button>'; $('pwChange').onclick = () => { ls.set(TOKEN_KEY, ''); cloudOk = false; renderSave(); }; return; }
+  box.innerHTML = `<span class="dot"></span><span>${ls.get(TOKEN_KEY) ? '雲端連不上，密碼可能打錯' : '第一次使用要輸入雲端密碼'}</span>
+    <input id="pw" type="password" placeholder="雲端密碼" autocomplete="off"><button class="btn primary" id="pwBtn">連線</button>`;
+  $('pwBtn').onclick = async () => { ls.set(TOKEN_KEY, $('pw').value.trim()); await ping(); if (cloudOk) { await loadCloudNotes(); toast('雲端已連線'); } render(); };
+}
+
+function renderSave() {
+  renderCloudBox();
+  const S = siteSummary();
+  $('thisTitle').textContent = `這次要存的：${sys.y} 年 ${sys.m} 月`;
+  $('thisTable').innerHTML = '<tr><th>院區</th><th>支援看診(節)</th><th>報備有涵蓋</th><th>待補報備(天)</th><th>零星單筆</th><th>不用報備</th><th>報備檔</th></tr>' +
+    S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td><td class="ok">有</td>`
+      : '<td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="bad">還沒有（不會存）</td>'}</tr>`).join('');
+  $('saveCloud').disabled = !cloudOk || !S.some(x => x.has);
+  $('savedMsg').innerHTML = savedAt ? `<span class="saved">✓ ${savedAt} 已存到雲端</span>` : '';
+  $('sheetLink').href = SHEET_URL;
+  // 歷月紀錄：月份 × 院區 的待補天數
+  if (history && history.length) {
+    const months = [...new Set(history.map(r => r[0]))].sort().reverse();
+    const sites = SITE_ORDER.filter(s => history.some(r => r[1] === s));
+    $('histTable').innerHTML = `<tr><th>月份</th>${sites.map(s => `<th>${s}</th>`).join('')}<th>合計</th></tr>` + months.map(m => {
+      let tot = 0;
+      const tds = sites.map(s => { const r = history.find(x => x[0] === m && x[1] === s); if (!r) return '<td class="mute">—</td>'; const v = +r[4] || 0; tot += v; return `<td class="${v ? 'bad' : 'ok'}">${v || '✓'}</td>`; }).join('');
+      return `<tr><td>${m}</td>${tds}<td class="${tot ? 'bad' : 'ok'}">${tot}</td></tr>`;
+    }).join('');
+  } else if (cloudOk) $('histTable').innerHTML = '<tr><td class="hint">雲端還沒有紀錄，存第一次之後就會出現</td></tr>';
+}
+
+$('saveCloud').onclick = async () => {
+  const btn = $('saveCloud'); btn.disabled = true; btn.textContent = '存檔中…';
+  try {
+    const S = siteSummary().filter(x => x.has);
+    const sites = S.map(x => x.s);
+    const j = await cloud('save', {
+      ym: ymText(), sites,
+      summary: S.map(x => [x.s, x.n, x.ok, x.miss, x.single, x.skip, [...sups[x.s].files].join('、')]),
+      lines: LINES.filter(l => sites.includes(l.site)).map(lineRow),
+      detail: R.out.filter(r => sites.includes(r.site)).sort((p, q) => bySite(p.site, q.site) || p.doc.localeCompare(q.doc, 'zh-Hant') || p.a - q.a)
+        .map(r => [r.site, r.doc, `${r.m}/${r.d}`, r.wd, r.sess, seg(r.a, r.b), r.n, r.wins.map(w => seg(w[0], w[1])).join('、'), r.status, r.gaps.map(g => seg(g[0], g[1])).join('、')]),
+    });
+    savedAt = j.at;
+    await ping();
+    toast(`已存到雲端：${sites.join('、')}`);
+  } catch (e) { toast('沒存成功：' + e.message, 5000); }
+  btn.textContent = '存到雲端';
+  render();
+};
+
+// ---------- 另外下載 Excel ----------
+$('saveXlsx').onclick = async () => {
+  const wb = new ExcelJS.Workbook();
+  const F = { name: 'Noto Sans TC', size: 11 };
+  const HEAD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9E3DC' } };
+  const border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  const today = new Date().toLocaleDateString('sv-SE');
+  const cols = [['院區', 8], ['醫師', 10], ['日期', 8], ['星期', 6], ['沒核准的時段', 22], ['類型', 13], ['實際看診', 30], ['當天已報備', 26], ['狀態', 10], ['原因／備註', 24]];
+  const sheet = (name, columns, rows, paint) => {
+    const ws = wb.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 1 }] });
+    ws.columns = columns.map(([h, w]) => ({ header: h, width: w }));
+    rows.forEach(r => ws.addRow(r));
+    ws.eachRow((row, i) => row.eachCell({ includeEmpty: true }, (c, j) => {
+      c.font = { ...F, bold: i === 1 }; c.border = border; c.alignment = { vertical: 'middle', wrapText: true };
+      if (i === 1) { c.fill = HEAD; c.alignment = { horizontal: 'center', vertical: 'middle' }; }
+      else if (paint) paint(c, rows[i - 2], j);
+    }));
+    if (rows.length) ws.autoFilter = { from: 'A1', to: { row: 1, column: columns.length } };
+  };
+  const red = (c, r, j) => { if (j === 5 && r[8] === '待補報備') c.font = { ...F, color: { argb: 'FF9A5A4C' }, bold: true }; if (r[8] === '不用報備') c.font = { ...F, color: { argb: 'FF9A9087' } }; };
+  const rowOf = l => lineRow(l).slice(0, 10);
+  sheet('總表', cols, LINES.map(rowOf), red);
+  for (const s of R.sites) {
+    const rows = LINES.filter(l => l.site === s).map(rowOf);
+    sheet(s, cols, rows.length ? rows : [[s, sups[s] ? '這個月支援看診都有報備' : '沒有報備檔，還沒比對', '', '', '', '', '', '', '', '']], rows.length ? red : null);
+  }
+  sheet('核對明細', [['院區', 8], ['醫師', 10], ['日期', 8], ['星期', 6], ['診次', 8], ['實際看診', 14], ['人次', 7], ['當天已報備', 26], ['結果', 13], ['沒核准的時段', 20]],
+    R.out.slice().sort((p, q) => bySite(p.site, q.site) || p.doc.localeCompare(q.doc, 'zh-Hant') || p.a - q.a)
+      .map(r => [r.site, r.doc, `${r.m}/${r.d}`, r.wd, r.sess, seg(r.a, r.b), r.n, r.wins.map(w => seg(w[0], w[1])).join('、'), r.status, r.gaps.map(g => seg(g[0], g[1])).join('、')]),
+    (c, r, j) => { if (j === 9 && r[8] !== '已涵蓋') c.font = { ...F, color: { argb: r[8] === '沒有報備檔' ? 'FF9A9087' : 'FF9A5A4C' }, bold: true }; });
+  const info = wb.addWorksheet('說明');
+  [`報備支援核對 民國 ${sys.y} 年 ${sys.m} 月（核對日期 ${today}）`, `系統時數檔：${sys.name}`,
+   ...Object.entries(sups).map(([s, S]) => `報備檔 ${s}：${[...S.files].join('、')}（${S.rows.size} 筆）`),
+   '比對方式：系統「明細」裡身分＝支援的每一節（第一筆完診～最後一筆完診），跟該院區報備檔裡有核准日期的報備時段比；沒被報備時段蓋到的部分就列出來。',
+   '類型：整段沒報備＝那節完全沒有報備；超出核准時間＝有報備但看診比報備早開始或晚結束；零星單筆＝只有 1 人次（多半是補登，請確認）。',
+   ...R.warns.map(w => '注意：' + w), ...(R.noFile.length ? [`還沒拖報備檔：${R.noFile.join('、')}`] : [])]
+    .forEach(t => info.addRow([t]).getCell(1).font = F);
+  info.getColumn(1).width = 120; info.getCell('A1').font = { ...F, bold: true, size: 14 };
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `報備支援核對_${sys.y}年${String(sys.m).padStart(2, '0')}月.xlsx`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`已下載 ${a.download}`);
+};
+
+ping().then(render);
+render();
+</script>
+</body>
+</html>
