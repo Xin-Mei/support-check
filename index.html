@@ -21,8 +21,8 @@ header { background: var(--card); border-bottom: 1px solid var(--line); position
 header .in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand img { width: 44px; height: 44px; border-radius: 50%; }
-.brand .t1 { font-size: 12px; letter-spacing: .14em; color: #858A86; }   /* 標題列＝金鶯工具共用外框（墨綠），內頁重點色才是奶茶 */
-.brand .t2 { font-weight: 900; font-size: 21px; letter-spacing: .04em; line-height: 1.2; color: #2F4A3F; }
+.brand .t1 { font-size: 12px; letter-spacing: .14em; color: var(--muted); }   /* logo＝金鶯工具共用墨綠；工具名稱保留自己的奶茶色 */
+.brand .t2 { font-weight: 900; font-size: 21px; letter-spacing: .04em; line-height: 1.2; color: var(--brand); }
 /* 步驟列 */
 .stepper { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .st { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); padding: 6px 10px; border-radius: 99px; cursor: pointer; }
@@ -209,7 +209,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-04 16:50';
+const APP_VERSION = '2026-11-04 16:57';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
