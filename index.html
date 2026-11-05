@@ -209,7 +209,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-04 16:57';
+const APP_VERSION = '2026-11-05 19:36';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
@@ -243,9 +243,12 @@ function maskMatch(masked, name) {
   const m = String(masked || '').replace(/\s/g, '').replace(/[＊○〇Ｏ]/g, '*');
   if (!m || !name) return false;
   if (m === name) return true;
-  if (m.length === name.length) return [...m].every((c, i) => c === '*' || c === name[i]);
-  return m[0] === name[0] && (m.at(-1) === '*' || m.at(-1) === name.at(-1));
+  // 系統檔偶爾把罕用字匯成亂碼（私用區字，例：115/10 高國峯 的「峯」）→ 那個字當作對得上
+  const same = (p, q) => p === '*' || p === q || PUA.test(q);
+  if (m.length === name.length) return [...m].every((c, i) => same(c, name[i]));
+  return same(m[0], name[0]) && same(m.at(-1), name.at(-1));
 }
+const PUA = /[-]/;
 
 // ---------- 讀檔 ----------
 const drop = $('drop');
@@ -331,6 +334,8 @@ const saveNotes = () => ls.set(NOTE_KEY, JSON.stringify(notes));
 function compute() {
   const warns = [], out = [];
   const visits = sys.visits.filter(v => v.role === '支援' && v.y === sys.y && v.m === sys.m);
+  const garbled = [...new Set(sys.visits.map(v => v.doc).filter(n => PUA.test(n)))];
+  if (garbled.length) warns.push(`系統時數檔有醫師名字是亂碼字：${garbled.map(n => n.replace(PUA, '□')).join('、')}（□ 那個字先當作對得上，請資訊長修正）`);
   const supDocs = {};
   for (const v of visits) (supDocs[v.site] ||= new Set()).add(v.doc);
   const m0 = dayAbs(sys.y, sys.m, 1), m1 = dayAbs(sys.m === 12 ? sys.y + 1 : sys.y, sys.m % 12 + 1, 1);
@@ -631,7 +636,7 @@ $('saveXlsx').onclick = async () => {
   const info = wb.addWorksheet('說明');
   [`報備支援核對 民國 ${sys.y} 年 ${sys.m} 月（核對日期 ${today}）`, `系統時數檔：${sys.name}`,
    ...Object.entries(sups).map(([s, S]) => `報備檔 ${s}：${[...S.files].join('、')}（${S.rows.size} 筆）`),
-   '比對方式：系統「明細」裡身分＝支援的每一節（第一筆完診～最後一筆完診），跟該院區報備檔裡有核准日期的報備時段比；沒被報備時段蓋到的部分就列出來。',
+   '比對方式：系統「明細」裡身分＝支援的每一節（第一筆～最後一筆的時間；115/10 起資訊長改用看診開始時間），跟該院區報備檔裡有核准日期的報備時段比；沒被報備時段蓋到的部分就列出來。',
    '類型：整段沒報備＝那節完全沒有報備；超出核准時間＝有報備但看診比報備早開始或晚結束；零星單筆＝只有 1 人次（多半是補登，請確認）。',
    ...R.warns.map(w => '注意：' + w), ...(R.noFile.length ? [`還沒拖報備檔：${R.noFile.join('、')}`] : [])]
     .forEach(t => info.addRow([t]).getCell(1).font = F);
