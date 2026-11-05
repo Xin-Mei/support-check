@@ -71,6 +71,9 @@ button:disabled { opacity: .45; cursor: default; }
 .legend .l1::before { background: var(--ok-bg); border: 1px solid #BFD8CC; }
 .legend .l2::before { background: #fff; border: 1px solid #E3CFA6; }
 .legend .l3::before { border: 1px dashed #DCD5CC; }
+.tile.part { border: 1px solid #BFD8CC; background: #fff; color: var(--ok); font-weight: 700; }
+.tile.part .dt { background: var(--ok); } .tile.part small { color: var(--ok); }
+.legend .l4::before { background: #fff; border: 1px solid #BFD8CC; }
 /* 步驟 2：結果 */
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
 .kpi { margin: 0; padding: 16px 18px; }
@@ -148,7 +151,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
     <p class="lead">把資訊長撈的系統時數檔，和各院區下載的報備檔一起拖進來（可以分幾次拖）。</p>
     <div class="drop" id="drop">
       <b>把檔案拖進來</b>
-      <span>或點這裡選檔 ・ 報備檔名稱一樣沒關係，會看檔案裡的「支援機構名稱」認院區</span>
+      <span>或點這裡選檔 ・ 報備檔「他院支援本院」「本院支援他院」都可以（檔名保留這幾個字），會看檔案裡的機構名稱認院區</span>
       <input type="file" id="pick" multiple accept=".xlsx,.xls" hidden>
     </div>
     <div class="card" style="margin-top:14px">
@@ -158,7 +161,8 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
     <div class="card">
       <div class="suphead"><h2>各院區報備檔</h2><div class="prog"><i id="supBar" style="width:0"></i></div><span class="cnt" id="supHint"></span></div>
       <div class="tiles" id="tiles"></div>
-      <div class="legend" id="legend" hidden><span class="l1">已上傳</span><span class="l2">這月有支援、還缺</span><span class="l3">這月沒支援</span></div>
+      <div class="legend" id="legend" hidden><span class="l1">可以比對</span><span class="l4">部分醫師（滑過看還缺誰）</span><span class="l2">這月有支援、還缺</span><span class="l3">這月沒支援</span></div>
+      <div class="hint" id="homeHint" hidden style="margin-top:10px"></div>
     </div>
   </section>
 
@@ -209,7 +213,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-05 19:36';
+const APP_VERSION = '2026-11-05 19:52';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
@@ -220,7 +224,8 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch { return 
 
 // ---------- 狀態 ----------
 let sys = null;            // { name, y, m, visits, sites }
-const sups = {};           // 院區 -> { files: Set, rows: Map }
+const sups = {};           // 被支援院區 -> { files: Set（他院支援本院檔）, full: 有沒有這院區的他院支援本院檔, rows: Map（兩種檔的報備都放這）}
+const homes = {};          // 專任院區 -> { files: Set, rows: []（本院支援他院檔，只涵蓋專任在這院區的醫師）}
 let page = 1, curSite = '全部';
 const SITE_ORDER = ['鶯歌', '三樹', '桃園', '土城', '八德', '龍潭', '大溪', '大竹', '大湳', '平鎮', '埔心', '觀音', '龍岡', '樹林'];
 const bySite = (a, b) => (SITE_ORDER.indexOf(a) + 1 || 99) - (SITE_ORDER.indexOf(b) + 1 || 99);
@@ -301,25 +306,43 @@ function readSystem(name, wb) {
   sys = { name, y, m, visits, sites: wb.SheetNames.filter(s => s.endsWith('院區')).map(siteOf) };
 }
 
+// 兩種報備檔：
+//   他院支援本院（某院區的機構卡查「誰來支援我」）→ 涵蓋這院區所有支援醫師
+//   本院支援他院（某院區的機構卡查「我的醫師去哪支援」）→ 只涵蓋「專任在這院區」的醫師，別院區來的醫師不能拿它判斷沒報備
+// 支援到非金鶯的機構（例：淨妍醫美）不用核對，跳過
 function readSupport(name, wb) {
-  const got = new Set();
+  const rows = [];
+  let other = 0;
   for (const sn of wb.SheetNames) {
     const R = rowsOf(wb.Sheets[sn]);
     const hi = R.slice(0, 8).findIndex(r => r.some(v => String(v).includes('支援機構名稱')));
     if (hi < 0) continue;
-    const c = colMap(R[hi], { id: ['案件編號'], kind: ['案件類別'], ok: ['核準日期', '核准日期'], name: ['姓名'], s: ['支援開始時間'], e: ['支援結束時間'], to: ['支援機構名稱'] });
+    const c = colMap(R[hi], { id: ['案件編號'], kind: ['案件類別'], ok: ['核準日期', '核准日期'], name: ['姓名'], s: ['支援開始時間'], e: ['支援結束時間'], to: ['支援機構名稱'], from: ['原機構名稱'] });
     for (const r of R.slice(hi + 1)) {
       const s = supTime(r[c.s]), e = supTime(r[c.e]);
       if (s == null || e == null || !r[c.name]) continue;
-      const site = siteOf(r[c.to]);
-      const row = { site, id: r[c.id], kind: String(r[c.kind] || '').trim(), ok: String(r[c.ok] || '').trim(), name: String(r[c.name]).trim(), s, e };
-      const S = sups[site] ||= { files: new Set(), rows: new Map() };
-      S.files.add(name);
-      S.rows.set([row.id, row.name, row.s, row.e].join('|'), row);   // 同一份拖兩次不會重複
-      got.add(site);
+      if (!/金鶯/.test(String(r[c.to]))) { other++; continue; }
+      rows.push({ site: siteOf(r[c.to]), from: c.from >= 0 && /金鶯/.test(String(r[c.from])) ? siteOf(r[c.from]) : '',
+        id: r[c.id], kind: String(r[c.kind] || '').trim(), ok: String(r[c.ok] || '').trim(), name: String(r[c.name]).trim(), s, e });
     }
   }
-  return got.size ? [...got] : null;
+  if (!rows.length) return other ? [`（都是支援其他機構，沒有金鶯院區的報備）`] : null;
+  const froms = new Set(rows.map(r => r.from)), tos = new Set(rows.map(r => r.site));
+  const isHome = /本院支援他院/.test(name) ? true : /他院支援本院/.test(name) ? false : froms.size === 1 && !froms.has('') && tos.size > 1;
+  const add = r => {
+    const S = sups[r.site] ||= { files: new Set(), full: false, rows: new Map() };
+    S.rows.set([r.id, r.name, r.s, r.e].join('|'), r);   // 同一份拖兩次、兩種檔有同一筆都不會重複
+    return S;
+  };
+  if (isHome) {
+    const home = [...froms][0] || '?';
+    const H = homes[home] ||= { files: new Set(), rows: [] };
+    H.files.add(name);
+    for (const r of rows) { add(r); if (!H.rows.some(x => x.id === r.id && x.s === r.s && x.e === r.e)) H.rows.push(r); }
+    return [`${home}本院支援他院（${rows.length} 筆${other ? `，另 ${other} 筆支援其他機構不用核對` : ''}）`];
+  }
+  for (const r of rows) { const S = add(r); S.files.add(name); S.full = true; }
+  return [...tos];
 }
 
 // 有效的報備：要有核准日期，而且不是取消／撤銷／註銷
@@ -338,23 +361,32 @@ function compute() {
   if (garbled.length) warns.push(`系統時數檔有醫師名字是亂碼字：${garbled.map(n => n.replace(PUA, '□')).join('、')}（□ 那個字先當作對得上，請資訊長修正）`);
   const supDocs = {};
   for (const v of visits) (supDocs[v.site] ||= new Set()).add(v.doc);
+  // 醫師的專任院區＝這個月系統裡身分＝專任的院區（本院支援他院檔只能核對這些醫師）
+  const homeOf = {};
+  for (const v of sys.visits) if (v.role === '專任' && v.y === sys.y && v.m === sys.m) (homeOf[v.doc] ||= new Set()).add(v.site);
+  const covered = v => !!(sups[v.site] && sups[v.site].full) || [...(homeOf[v.doc] || [])].some(h => homes[h]);
   const m0 = dayAbs(sys.y, sys.m, 1), m1 = dayAbs(sys.m === 12 ? sys.y + 1 : sys.y, sys.m % 12 + 1, 1);
+  const inMonth = L => L.some(r => r.e > m0 && r.s < m1);
   for (const [site, S] of Object.entries(sups)) {
     for (const mk of new Set([...S.rows.values()].map(r => r.name))) {
       const hit = [...(supDocs[site] || [])].filter(d => maskMatch(mk, d));
       if (hit.length > 1) warns.push(`${site}：報備檔的「${mk}」同時對得上 ${hit.join('、')}，請人工確認`);
     }
-    if (![...S.rows.values()].some(r => r.e > m0 && r.s < m1)) warns.push(`${site}：報備檔裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？（${site}的結果先不要用）`);
+    if (S.full && !inMonth([...S.rows.values()])) warns.push(`${site}：報備檔裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？（${site}的結果先不要用）`);
     const bad = [...S.rows.values()].filter(r => !valid(r));
     if (bad.length) warns.push(`${site}：有 ${bad.length} 筆報備沒有核准日期或是取消，不算數（${[...new Set(bad.map(r => r.kind || '沒核准'))].join('、')}）`);
-    if (sys.sites.length && !sys.sites.includes(site)) warns.push(`報備檔的院區「${site}」在系統時數檔裡找不到`);
+    if (S.full && sys.sites.length && !sys.sites.includes(site)) warns.push(`報備檔的院區「${site}」在系統時數檔裡找不到`);
+  }
+  for (const [h, H] of Object.entries(homes)) {
+    if (!inMonth(H.rows)) warns.push(`${h}本院支援他院：檔案裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？`);
+    if (!Object.values(homeOf).some(S => S.has(h))) warns.push(`${h}本院支援他院：系統時數檔這個月沒有專任在${h}的醫師，這份檔用不到`);
   }
   for (const v of visits) {
     const S = sups[v.site];
     const res = { ...v, status: '', gaps: [], wins: [] };
-    if (!S) { res.status = '沒有報備檔'; out.push(res); continue; }
+    if (!covered(v)) { res.status = '沒有報備檔'; out.push(res); continue; }
     const day0 = dayAbs(v.y, v.m, v.d);
-    res.wins = [...S.rows.values()].filter(r => valid(r) && maskMatch(r.name, v.doc) && r.e > day0 && r.s < day0 + 1440).map(r => [r.s, r.e]).sort((p, q) => p[0] - q[0]);
+    res.wins = [...(S ? S.rows.values() : [])].filter(r => valid(r) && maskMatch(r.name, v.doc) && r.e > day0 && r.s < day0 + 1440).map(r => [r.s, r.e]).sort((p, q) => p[0] - q[0]);
     let cur = v.a;
     for (const [s, e] of res.wins) {
       if (e < cur || s > v.b) continue;
@@ -370,7 +402,19 @@ function compute() {
     out.push(res);
   }
   const sites = [...new Set(visits.map(v => v.site))].sort(bySite);
-  return { out, warns, sites, noFile: sites.filter(s => !sups[s]) };
+  // 每院區：還沒比對的醫師（沒有這院區的他院支援本院、也沒有他專任院區的本院支援他院）
+  const uncov = {}, docsAt = {};
+  for (const r of out) { (docsAt[r.site] ||= new Set()).add(r.doc); if (r.status === '沒有報備檔') (uncov[r.site] ||= new Set()).add(r.doc); }
+  const noFile = sites.filter(s => uncov[s] && uncov[s].size === docsAt[s].size);
+  const part = Object.fromEntries(sites.filter(s => uncov[s] && !noFile.includes(s)).map(s => [s, [...uncov[s]]]));
+  return { out, warns, sites, noFile, part, docsAt };
+}
+// 這院區用到哪些報備檔（存雲端、Excel 說明用）
+function filesFor(s) {
+  const f = sups[s] && sups[s].full ? [...sups[s].files] : [];
+  const homeSites = new Set(R.out.filter(r => r.site === s && r.status !== '沒有報備檔').flatMap(r => sys.visits.filter(v => v.doc === r.doc && v.role === '專任').map(v => v.site)));
+  for (const h of homeSites) if (homes[h]) f.push(...[...homes[h].files].map(x => `${x}（${h}本院支援他院）`));
+  return [...new Set(f)];
 }
 
 // 同一位醫師同一天的缺口合成一行
@@ -404,7 +448,9 @@ function go(p) { page = p; render(); window.scrollTo(0, 0); }
 document.querySelectorAll('.st').forEach(b => b.onclick = () => go(+b.dataset.p));
 $('nextBtn').onclick = () => go(page + 1);
 $('backBtn').onclick = () => go(page - 1);
-$('clearBtn').onclick = () => { sys = null; for (const k of Object.keys(sups)) delete sups[k]; curSite = '全部'; go(1); };
+$('clearBtn').onclick = () => { sys = null; for (const o of [sups, homes]) for (const k of Object.keys(o)) delete o[k]; curSite = '全部'; go(1); };
+// 院區比對狀態：full＝全部醫師都能比；part＝只有部分醫師能比；none＝都還不能比；idle＝這月沒支援
+const siteState = s => !R || !R.sites.includes(s) ? (sups[s] && sups[s].full ? 'full' : 'idle') : R.noFile.includes(s) ? 'none' : R.part[s] ? 'part' : 'full';
 
 function render() {
   if (sys) { R = compute(); LINES = missLines(R.out); } else { R = null; LINES = []; }
@@ -419,7 +465,7 @@ function render() {
   $('nextBtn').style.display = page < 3 ? '' : 'none';
   $('nextBtn').disabled = !sys;
   $('nextBtn').textContent = page === 1 ? '下一步：看結果 →' : '下一步：存紀錄 →';
-  $('sum').textContent = sys ? `${sys.y} 年 ${sys.m} 月 ・ 報備檔 ${Object.keys(sups).length} 個院區` + (R && R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '') : '還沒有系統時數檔';
+  $('sum').textContent = sys ? `${sys.y} 年 ${sys.m} 月 ・ 可以比對 ${R.sites.filter(s => siteState(s) === 'full').length} 個院區` + (Object.keys(R.part).length ? ` ・ 部分 ${Object.keys(R.part).length} 個` : '') + (R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '') : '還沒有系統時數檔';
   if (page === 1) renderUpload();
   if (page === 2) renderResult();
   if (page === 3) renderSave();
@@ -431,17 +477,21 @@ function renderUpload() {
   box.innerHTML = sys
     ? `<span class="ic">✓</span><div><b>${sys.y} 年 ${sys.m} 月</b><div class="hint">${esc(sys.name)} ・ 支援看診 ${R.out.length} 節</div></div>`
     : `<span class="ic">?</span><div><b>還沒有</b><div class="hint">醫師看診時間_健保_11509.xlsx 這種檔</div></div>`;
-  const need = R ? new Set(R.sites) : new Set();
   $('tiles').innerHTML = SITE_ORDER.concat(Object.keys(sups).filter(s => !SITE_ORDER.includes(s))).map(s => {
-    const S = sups[s];
-    if (S) return `<div class="tile ok">✓ ${s}<small>${S.rows.size} 筆</small></div>`;
-    if (need.has(s)) return `<div class="tile need"><i class="dt"></i>${s}<small>還缺</small></div>`;
+    const st = siteState(s), S = sups[s];
+    if (st === 'full') return `<div class="tile ok">✓ ${s}<small>${S && S.full ? S.rows.size + ' 筆' : '可比對'}</small></div>`;
+    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><i class="dt"></i>${s}<small>${all - R.part[s].length}/${all} 位</small></div>`; }
+    if (st === 'none') return `<div class="tile need"><i class="dt"></i>${s}<small>還缺</small></div>`;
     return `<div class="tile${sys ? ' none' : ''}"><i class="dt"></i>${s}</div>`;
   }).join('');
-  const n = Object.keys(sups).length;
-  $('supHint').innerHTML = `<b>${n}</b>/ ${SITE_ORDER.length} 院區`;
-  $('supBar').style.width = Math.min(100, n / SITE_ORDER.length * 100) + '%';
+  const n = R ? R.sites.filter(s => siteState(s) === 'full').length : Object.values(sups).filter(S => S.full).length;
+  const tot = R ? R.sites.length : SITE_ORDER.length;
+  $('supHint').innerHTML = `<b>${n}</b>/ ${tot} 院區`;
+  $('supBar').style.width = Math.min(100, n / tot * 100) + '%';
   $('legend').hidden = !sys;
+  const H = Object.entries(homes);
+  $('homeHint').hidden = !H.length;
+  $('homeHint').innerHTML = H.length ? `已拖「本院支援他院」：${H.map(([h, x]) => `<b>${h}</b>（${x.rows.length} 筆）`).join('、')} → 只比對專任在這些院區的醫師` : '';
 }
 
 function renderResult() {
@@ -454,29 +504,33 @@ function renderResult() {
     <div class="card kpi bad"><div class="l">要補報備</div><div class="v">${docDays}</div><div class="s">醫師・天</div></div>
     <div class="card kpi warn"><div class="l">零星單筆待確認</div><div class="v">${single}</div><div class="s">只有 1 人次，可能是補登</div></div>`;
   const w = [...R.warns];
-  if (R.noFile.length) w.unshift(`還沒拖報備檔：${R.noFile.join('、')}（這些院區的 ${sup.filter(r => r.status === '沒有報備檔').length} 節還沒比對）`);
+  for (const [s, docs] of Object.entries(R.part).reverse()) w.unshift(`${s}只比對了部分醫師：${docs.join('、')} 還沒比對（要${s}的「他院支援本院」，或這幾位專任院區的「本院支援他院」）`);
+  if (R.noFile.length) w.unshift(`還沒有報備檔：${R.noFile.join('、')}`);
+  const nUn = sup.filter(r => r.status === '沒有報備檔').length;
+  if (nUn) w.unshift(`有 ${nUn} 節支援看診還沒比對（不會算成沒報備）`);
   $('warns').style.display = w.length ? '' : 'none';
   $('warns').innerHTML = `<h2>要注意</h2><ul>${w.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
   if (curSite !== '全部' && !R.sites.includes(curSite)) curSite = '全部';
   const cnt = s => LINES.filter(l => !l.skip && (s === '全部' || l.site === s)).length;
   $('sites').innerHTML = ['全部', ...R.sites].map(s => {
-    const nf = s !== '全部' && !sups[s], c = cnt(s);
-    return `<button class="site${s === curSite ? ' on' : ''}" data-s="${s}">${s}<span class="c ${nf ? 'nofile' : c ? '' : 'zero'}">${nf ? '沒檔' : c || '✓'}</span></button>`;
+    const nf = s !== '全部' && R.noFile.includes(s), pt = s !== '全部' && !!R.part[s], c = cnt(s);
+    return `<button class="site${s === curSite ? ' on' : ''}" data-s="${s}">${s}<span class="c ${nf ? 'nofile' : c ? '' : 'zero'}">${nf ? '沒檔' : c || (pt ? '部分' : '✓')}</span></button>`;
   }).join('');
   $('sites').querySelectorAll('.site').forEach(b => b.onclick = () => { curSite = b.dataset.s; renderResult(); });
 
   const show = curSite === '全部' ? R.sites : [curSite];
   let html = '';
   for (const s of show) {
-    const L = LINES.filter(l => l.site === s), nf = !sups[s];
+    const L = LINES.filter(l => l.site === s), nf = R.noFile.includes(s), pt = R.part[s];
     if (curSite === '全部' && !L.length) continue;
-    html += `<h2 style="margin:18px 0 10px">${s}${nf ? ' <span class="tag mute">還沒拖報備檔</span>' : ''}</h2>`;
+    html += `<h2 style="margin:18px 0 10px">${s}${nf ? ' <span class="tag mute">還沒有報備檔</span>' : pt ? ' <span class="tag mute">部分醫師</span>' : ''}</h2>`;
     if (nf) {
-      const docs = [...new Set(R.out.filter(r => r.site === s).map(r => r.doc))];
-      html += `<div class="card hint">這個月有 ${docs.length} 位支援醫師：${docs.join('、')}。回到 ① 把${s}的報備檔拖進來才能比對。</div>`;
+      const docs = [...R.docsAt[s]];
+      html += `<div class="card hint">這個月有 ${docs.length} 位支援醫師：${docs.join('、')}。回到 ① 拖${s}的「他院支援本院」，或這些醫師專任院區的「本院支援他院」才能比對。</div>`;
       continue;
     }
-    if (!L.length) { html += `<div class="card empty">${s}的支援看診都有報備 ✓</div>`; continue; }
+    if (pt) html += `<div class="card hint">還沒比對：${pt.join('、')}（要${s}的「他院支援本院」，或他們專任院區的「本院支援他院」）</div>`;
+    if (!L.length) { html += `<div class="card empty">${s}${pt ? '已比對的醫師' : '的支援看診'}都有報備 ✓</div>`; continue; }
     html += '<div class="docs">';
     for (const doc of [...new Set(L.map(l => l.doc))]) {
       const D = L.filter(l => l.doc === doc);
@@ -493,7 +547,7 @@ function renderResult() {
     }
     html += '</div>';
   }
-  if (!html) html = `<div class="card empty">${Object.keys(sups).length ? '拖進來的院區都有報備 ✓' : '回到 ① 把各院區的報備檔拖進來就會開始比對'}</div>`;
+  if (!html) html = `<div class="card empty">${R.sites.some(s => !R.noFile.includes(s)) ? '已比對的都有報備 ✓' : '回到 ① 把各院區的報備檔拖進來就會開始比對'}</div>`;
   $('view').innerHTML = html;
   $('view').querySelectorAll('.ln').forEach(el => {
     const l = LINES[+el.dataset.i];
@@ -525,8 +579,8 @@ $('copyBtn').onclick = async () => {
 function siteSummary() {
   return R.sites.map(s => {
     const o = R.out.filter(r => r.site === s), L = LINES.filter(l => l.site === s);
-    const has = !!sups[s];
-    return { s, has, n: o.length, ok: o.filter(r => r.status === '已涵蓋').length,
+    const has = !R.noFile.includes(s);
+    return { s, has, part: !!R.part[s], n: o.length, ok: o.filter(r => r.status === '已涵蓋').length,
       miss: L.filter(l => !l.skip && l.type !== '零星單筆').length, single: L.filter(l => !l.skip && l.type === '零星單筆').length, skip: L.filter(l => l.skip).length };
   });
 }
@@ -566,10 +620,11 @@ function renderSave() {
   const S = siteSummary();
   $('thisTitle').textContent = `這次要存的：${sys.y} 年 ${sys.m} 月`;
   $('thisTable').innerHTML = '<tr><th>院區</th><th>支援看診(節)</th><th>報備有涵蓋</th><th>待補報備(天)</th><th>零星單筆</th><th>不用報備</th><th>報備檔</th></tr>' +
-    S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td><td class="ok">有</td>`
+    S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td>${x.part ? `<td class="bad">部分（還缺 ${R.part[x.s].join('、')}）</td>` : '<td class="ok">有</td>'}`
       : '<td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="bad">還沒有（不會存）</td>'}</tr>`).join('');
   $('saveCloud').disabled = !cloudOk || !S.some(x => x.has);
-  $('savedMsg').innerHTML = savedAt ? `<span class="saved">✓ ${savedAt} 已存到雲端</span>` : '';
+  $('savedMsg').innerHTML = (savedAt ? `<span class="saved">✓ ${savedAt} 已存到雲端</span>` : '') +
+    (S.some(x => x.part) ? `<div class="hint" style="margin-top:6px">「部分」的院區：之後補到檔再存時，要把這次的檔一起拖進來（雲端會用新的整個換掉那個院區這個月的紀錄）</div>` : '');
   $('sheetLink').href = SHEET_URL;
   // 歷月紀錄：月份 × 院區 的待補天數
   if (history && history.length) {
@@ -590,7 +645,7 @@ $('saveCloud').onclick = async () => {
     const sites = S.map(x => x.s);
     const j = await cloud('save', {
       ym: ymText(), sites,
-      summary: S.map(x => [x.s, x.n, x.ok, x.miss, x.single, x.skip, [...sups[x.s].files].join('、')]),
+      summary: S.map(x => [x.s, x.n, x.ok, x.miss, x.single, x.skip, filesFor(x.s).join('、') + (x.part ? `（部分，還缺 ${R.part[x.s].join('、')}）` : '')]),
       lines: LINES.filter(l => sites.includes(l.site)).map(lineRow),
       detail: R.out.filter(r => sites.includes(r.site)).sort((p, q) => bySite(p.site, q.site) || p.doc.localeCompare(q.doc, 'zh-Hant') || p.a - q.a)
         .map(r => [r.site, r.doc, `${r.m}/${r.d}`, r.wd, r.sess, seg(r.a, r.b), r.n, r.wins.map(w => seg(w[0], w[1])).join('、'), r.status, r.gaps.map(g => seg(g[0], g[1])).join('、')]),
@@ -627,7 +682,7 @@ $('saveXlsx').onclick = async () => {
   sheet('總表', cols, LINES.map(rowOf), red);
   for (const s of R.sites) {
     const rows = LINES.filter(l => l.site === s).map(rowOf);
-    sheet(s, cols, rows.length ? rows : [[s, sups[s] ? '這個月支援看診都有報備' : '沒有報備檔，還沒比對', '', '', '', '', '', '', '', '']], rows.length ? red : null);
+    sheet(s, cols, rows.length ? rows : [[s, R.noFile.includes(s) ? '沒有報備檔，還沒比對' : R.part[s] ? `已比對的醫師都有報備（還沒比對：${R.part[s].join('、')}）` : '這個月支援看診都有報備', '', '', '', '', '', '', '', '']], rows.length ? red : null);
   }
   sheet('核對明細', [['院區', 8], ['醫師', 10], ['日期', 8], ['星期', 6], ['診次', 8], ['實際看診', 14], ['人次', 7], ['當天已報備', 26], ['結果', 13], ['沒核准的時段', 20]],
     R.out.slice().sort((p, q) => bySite(p.site, q.site) || p.doc.localeCompare(q.doc, 'zh-Hant') || p.a - q.a)
@@ -635,10 +690,12 @@ $('saveXlsx').onclick = async () => {
     (c, r, j) => { if (j === 9 && r[8] !== '已涵蓋') c.font = { ...F, color: { argb: r[8] === '沒有報備檔' ? 'FF9A9087' : 'FF9A5A4C' }, bold: true }; });
   const info = wb.addWorksheet('說明');
   [`報備支援核對 民國 ${sys.y} 年 ${sys.m} 月（核對日期 ${today}）`, `系統時數檔：${sys.name}`,
-   ...Object.entries(sups).map(([s, S]) => `報備檔 ${s}：${[...S.files].join('、')}（${S.rows.size} 筆）`),
+   ...Object.entries(sups).filter(([, S]) => S.full).map(([s, S]) => `他院支援本院 ${s}：${[...S.files].join('、')}`),
+   ...Object.entries(homes).map(([h, H]) => `本院支援他院 ${h}：${[...H.files].join('、')}（${H.rows.length} 筆，只核對專任在${h}的醫師）`),
+   ...Object.entries(R.part).map(([s, d]) => `${s}還沒比對的醫師：${d.join('、')}`),
    '比對方式：系統「明細」裡身分＝支援的每一節（第一筆～最後一筆的時間；115/10 起資訊長改用看診開始時間），跟該院區報備檔裡有核准日期的報備時段比；沒被報備時段蓋到的部分就列出來。',
    '類型：整段沒報備＝那節完全沒有報備；超出核准時間＝有報備但看診比報備早開始或晚結束；零星單筆＝只有 1 人次（多半是補登，請確認）。',
-   ...R.warns.map(w => '注意：' + w), ...(R.noFile.length ? [`還沒拖報備檔：${R.noFile.join('、')}`] : [])]
+   ...R.warns.map(w => '注意：' + w), ...(R.noFile.length ? [`還沒有報備檔：${R.noFile.join('、')}`] : [])]
     .forEach(t => info.addRow([t]).getCell(1).font = F);
   info.getColumn(1).width = 120; info.getCell('A1').font = { ...F, bold: true, size: 14 };
   const buf = await wb.xlsx.writeBuffer();
