@@ -117,7 +117,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-
 table.t th { text-align: center; color: var(--muted); font-weight: 500; font-size: 12.5px; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.t td { padding: 7px 6px; border-bottom: 1px solid var(--line-soft); text-align: center; }
 table.t td:first-child, table.t th:first-child { text-align: left; }
-table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: var(--ok); } table.t td.mute { color: #B3AAA0; }
+table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: var(--ok); } table.t td.mute { color: #B3AAA0; } table.t td.warnc { color: var(--warn); font-weight: 700; cursor: help; }
 .cloud { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
 .dot.ok { background: var(--ok); }
@@ -213,7 +213,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-09 17:07';
+const APP_VERSION = '2026-11-09 17:30';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
@@ -410,7 +410,22 @@ function compute() {
   for (const r of out) { (docsAt[r.site] ||= new Set()).add(r.doc); if (r.status === '沒有報備檔') (uncov[r.site] ||= new Set()).add(r.doc); }
   const noFile = sites.filter(s => uncov[s] && uncov[s].size === docsAt[s].size);
   const part = Object.fromEntries(sites.filter(s => uncov[s] && !noFile.includes(s)).map(s => [s, [...uncov[s]]]));
-  return { out, warns, sites, noFile, part, docsAt };
+  return { out, warns, sites, noFile, part, docsAt, homeOf };
+}
+// 一句話告訴她還要拖哪些院區的檔（不逐院區列醫師名字）
+function needHint() {
+  const un = R.out.filter(r => r.status === '沒有報備檔');
+  if (!un.length) return '';
+  const homesNeed = new Set(), noHome = new Map();
+  for (const r of un) {
+    const hs = R.homeOf[r.doc];
+    if (hs && hs.size) hs.forEach(h => homesNeed.add(h));
+    else (noHome.get(r.doc) || noHome.set(r.doc, new Set()).get(r.doc)).add(r.site);
+  }
+  const parts = [];
+  if (homesNeed.size) parts.push(`再拖 ${[...homesNeed].sort(bySite).join('、')} 的「本院支援他院」`);
+  if (noHome.size) parts.push([...noHome].map(([d, ss]) => `${d}（沒有專任院區）要 ${[...ss].sort(bySite).join('、')} 的「他院支援本院」`).join('；'));
+  return `還有 ${un.length} 節沒比對（不會算成沒報備）：${parts.join('；')}`;
 }
 // 這院區用到哪些報備檔（存雲端、Excel 說明用）
 function filesFor(s) {
@@ -507,10 +522,8 @@ function renderResult() {
     <div class="card kpi bad"><div class="l">要補報備</div><div class="v">${docDays}</div><div class="s">醫師・天</div></div>
     <div class="card kpi warn"><div class="l">零星單筆待確認</div><div class="v">${single}</div><div class="s">只有 1 人次，可能是補登</div></div>`;
   const w = [...R.warns];
-  for (const [s, docs] of Object.entries(R.part).reverse()) w.unshift(`${s}只比對了部分醫師：${docs.join('、')} 還沒比對（要${s}的「他院支援本院」，或這幾位專任院區的「本院支援他院」）`);
-  if (R.noFile.length) w.unshift(`還沒有報備檔：${R.noFile.join('、')}`);
-  const nUn = sup.filter(r => r.status === '沒有報備檔').length;
-  if (nUn) w.unshift(`有 ${nUn} 節支援看診還沒比對（不會算成沒報備）`);
+  const need = needHint();
+  if (need) w.unshift(need);
   $('warns').style.display = w.length ? '' : 'none';
   $('warns').innerHTML = `<h2>要注意</h2><ul>${w.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
   if (curSite !== '全部' && !R.sites.includes(curSite)) curSite = '全部';
@@ -623,11 +636,11 @@ function renderSave() {
   const S = siteSummary();
   $('thisTitle').textContent = `這次要存的：${sys.y} 年 ${sys.m} 月`;
   $('thisTable').innerHTML = '<tr><th>院區</th><th>支援看診(節)</th><th>報備有涵蓋</th><th>待補報備(天)</th><th>零星單筆</th><th>不用報備</th><th>報備檔</th></tr>' +
-    S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td>${x.part ? `<td class="bad">部分（還缺 ${R.part[x.s].join('、')}）</td>` : '<td class="ok">有</td>'}`
+    S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td>${x.part ? `<td class="warnc" title="還沒比對：${esc(R.part[x.s].join('、'))}">部分</td>` : '<td class="ok">有</td>'}`
       : '<td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="bad">還沒有（不會存）</td>'}</tr>`).join('');
   $('saveCloud').disabled = !cloudOk || !S.some(x => x.has);
   $('savedMsg').innerHTML = (savedAt ? `<span class="saved">✓ ${savedAt} 已存到雲端</span>` : '') +
-    (S.some(x => x.part) ? `<div class="hint" style="margin-top:6px">「部分」的院區：之後補到檔再存時，要把這次的檔一起拖進來（雲端會用新的整個換掉那個院區這個月的紀錄）</div>` : '');
+    (needHint() ? `<div class="hint" style="margin-top:6px">${esc(needHint())}。<br>之後補到檔再存時，要把這次的檔一起拖進來（雲端會用新的整份換掉那個院區這個月的紀錄）。</div>` : '');
   $('sheetLink').href = SHEET_URL;
   // 歷月紀錄：月份 × 院區 的待補天數
   if (history && history.length) {
