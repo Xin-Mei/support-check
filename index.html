@@ -27,7 +27,7 @@ header .in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: fle
 .stepper { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .st { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); padding: 6px 10px; border-radius: 99px; cursor: pointer; }
 .st:disabled { cursor: default; opacity: .55; }
-.st i { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); font: 700 13px/1 'Segoe UI', Arial, sans-serif; color: var(--muted); background: #fff; }
+.st i { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); font: 700 13px/1 'Segoe UI', Arial, sans-serif; color: var(--muted); background: #fff; padding-bottom: 2px; }   /* 字型的數字天生偏下約 1px，底下多留 2px 讓數字上下置中（小玫 11/9）*/
 .st.on { color: var(--brand); font-weight: 700; } .st.on i { background: var(--brand); border-color: var(--brand); color: #fff; }
 .st.done i { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok); }
 .stepper .sep { width: 26px; height: 2px; background: var(--line); }
@@ -66,6 +66,9 @@ button:disabled { opacity: .45; cursor: default; }
 .tile.need { border: 1px solid #E3CFA6; background: #fff; color: var(--ink); font-weight: 700; }
 .tile.need .dt { background: var(--warn); } .tile.need small { color: var(--warn); }
 .tile.none { opacity: .5; }
+.tile.nocard { border: 1px solid #E2DED9; background: #EEECE9; color: #A39A90; cursor: help; }
+.tile.nocard .nm { white-space: nowrap; } .tile.nocard small { font-size: 11.5px; }
+.legend .l5::before { background: #EEECE9; border: 1px solid #E2DED9; }
 .legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
 .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 .legend .l1::before { background: var(--ok-bg); border: 1px solid #BFD8CC; }
@@ -127,6 +130,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 24px; z-index: 5; box-shadow: 0 -6px 20px rgba(81,74,64,.05); }
 .bar .in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
 .bar .sum { color: var(--muted); font-size: 14px; }
+.bar .sum .need { color: var(--bad); font-weight: 700; }
 .bar .sp { flex: 1; }
 .bar .primary { padding: 10px 24px; border-radius: 12px; font-size: 15px; }
 .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 12px; font-size: 14px; z-index: 20; opacity: 0; transition: .2s; pointer-events: none; max-width: 80vw; white-space: pre-line; line-height: 1.75; }
@@ -161,7 +165,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
     <div class="card">
       <div class="suphead"><h2>各院區報備檔</h2><div class="prog"><i id="supBar" style="width:0"></i></div><span class="cnt" id="supHint"></span></div>
       <div class="tiles" id="tiles"></div>
-      <div class="legend" id="legend" hidden><span class="l1">可以比對</span><span class="l4">部分醫師（滑過看還缺誰）</span><span class="l2">這月有支援、還缺</span><span class="l3">這月沒支援</span></div>
+      <div class="legend" id="legend" hidden><span class="l1">已上傳／可以比對</span><span class="l4">部分醫師（滑過看還缺誰）</span><span class="l2">這月有支援、還缺</span><span class="l3">這月沒支援</span><span class="l5">沒有機構卡</span></div>
       <div class="hint" id="homeHint" hidden style="margin-top:10px"></div>
     </div>
   </section>
@@ -213,7 +217,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-09 17:30';
+const APP_VERSION = '2026-11-09 17:42';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyt4wGsp68ZHZsRZSrhmzAlI-y54k7iILOcRTTwwd1mJpju1cJ28e3G2Wku4IGoRpH-/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '　版本 ' + APP_VERSION;
@@ -228,6 +232,7 @@ const sups = {};           // 被支援院區 -> { files: Set（他院支援本�
 const homes = {};          // 專任院區 -> { files: Set, rows: []（本院支援他院檔，只涵蓋專任在這院區的醫師）}
 let page = 1, curSite = '全部';
 const SITE_ORDER = ['鶯歌', '三樹', '桃園', '土城', '八德', '龍潭', '大溪', '大竹', '大湳', '平鎮', '埔心', '觀音', '龍岡', '樹林'];
+const NO_CARD = ['樹林'];   // 小玫沒有這些院區的機構卡，拿不到報備檔（2026-11-09）
 const bySite = (a, b) => (SITE_ORDER.indexOf(a) + 1 || 99) - (SITE_ORDER.indexOf(b) + 1 || 99);
 
 // 「大溪金鶯診所」→大溪、「大溪院區」→大溪；只寫「金鶯診所」的是桃園（總院）
@@ -423,7 +428,13 @@ function needHint() {
     else (noHome.get(r.doc) || noHome.set(r.doc, new Set()).get(r.doc)).add(r.site);
   }
   const parts = [];
-  if (homesNeed.size) parts.push(`再拖 ${[...homesNeed].sort(bySite).join('、')} 的「本院支援他院」`);
+  const canGet = [...homesNeed].filter(h => !NO_CARD.includes(h)).sort(bySite);
+  const cant = [...homesNeed].filter(h => NO_CARD.includes(h));
+  if (canGet.length) parts.push(`再拖 ${canGet.join('、')} 的「本院支援他院」`);
+  for (const h of cant) {
+    const docs = [...new Set(un.filter(r => R.homeOf[r.doc] && R.homeOf[r.doc].has(h)).map(r => r.doc))];
+    parts.push(`${h}沒有機構卡，專任${h}的${docs.join('、')}沒辦法比對`);
+  }
   if (noHome.size) parts.push([...noHome].map(([d, ss]) => `${d}（沒有專任院區）要 ${[...ss].sort(bySite).join('、')} 的「他院支援本院」`).join('；'));
   return `還有 ${un.length} 節沒比對（不會算成沒報備）：${parts.join('；')}`;
 }
@@ -472,18 +483,24 @@ const siteState = s => !R || !R.sites.includes(s) ? (sups[s] && sups[s].full ? '
 
 function render() {
   if (sys) { R = compute(); LINES = missLines(R.out); } else { R = null; LINES = []; }
-  if (!sys && page > 1) page = 1;
+  // 要有系統時數檔＋至少一份報備檔，才能往下一步（小玫 11/9：常忘記有沒有上傳成功）
+  const hasSup = Object.values(sups).some(S => S.full) || Object.keys(homes).length > 0;
+  const ready = !!sys && hasSup;
+  if (!ready && page > 1) page = 1;
   document.querySelectorAll('.page').forEach(s => s.classList.toggle('on', s.id === 'p' + page));
   document.querySelectorAll('.st').forEach(b => {
     const p = +b.dataset.p;
     b.classList.toggle('on', p === page); b.classList.toggle('done', p < page);
-    b.disabled = p > 1 && !sys;
+    b.disabled = p > 1 && !ready;
   });
   $('backBtn').style.display = page > 1 ? '' : 'none';
   $('nextBtn').style.display = page < 3 ? '' : 'none';
-  $('nextBtn').disabled = !sys;
+  $('nextBtn').disabled = !ready;
   $('nextBtn').textContent = page === 1 ? '下一步：看結果 →' : '下一步：存紀錄 →';
-  $('sum').textContent = sys ? `${sys.y} 年 ${sys.m} 月 ・ 可以比對 ${R.sites.filter(s => siteState(s) === 'full').length} 個院區` + (Object.keys(R.part).length ? ` ・ 部分 ${Object.keys(R.part).length} 個` : '') + (R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '') : '還沒有系統時數檔';
+  $('sum').innerHTML = !sys && !hasSup ? '<span class="need">還沒有系統時數檔、報備檔</span>'
+    : !sys ? `報備檔已上傳 ・ <span class="need">還差系統時數檔</span>`
+    : !hasSup ? `${sys.y} 年 ${sys.m} 月時數檔已上傳 ・ <span class="need">還差報備檔</span>`
+    : `${sys.y} 年 ${sys.m} 月 ・ 可以比對 ${R.sites.filter(s => siteState(s) === 'full').length} 個院區` + (Object.keys(R.part).length ? ` ・ 部分 ${Object.keys(R.part).length} 個` : '') + (R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '');
   if (page === 1) renderUpload();
   if (page === 2) renderResult();
   if (page === 3) renderSave();
@@ -497,16 +514,26 @@ function renderUpload() {
     : `<span class="ic">?</span><div><b>還沒有</b><div class="hint">醫師看診時間_健保_11509.xlsx 這種檔</div></div>`;
   $('tiles').innerHTML = SITE_ORDER.concat(Object.keys(sups).filter(s => !SITE_ORDER.includes(s))).map(s => {
     const st = siteState(s), S = sups[s];
-    if (st === 'full') return `<div class="tile ok">✓ ${s}<small>${S && S.full ? S.rows.size + ' 筆' : '可比對'}</small></div>`;
-    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><i class="dt"></i>${s}<small>${all - R.part[s].length}/${all} 位</small></div>`; }
-    if (st === 'none') return `<div class="tile need"><i class="dt"></i>${s}<small>還缺</small></div>`;
+    // 這個院區上傳了哪種報備檔：他院＝「他院支援本院」、本院＝「本院支援他院」
+    const up = [S && S.full ? '他院✓' : '', homes[s] ? '本院✓' : ''].filter(Boolean).join(' ');
+    const tip = up ? ` title="已上傳：${up.replace(/✓/g, '').split(' ').map(x => x === '他院' ? '他院支援本院' : '本院支援他院').join('、')}"` : '';
+    // 沒有機構卡的院區（樹林）：拿不到這院區的報備檔 → 灰色；別院區來支援的醫師還是能用他們專任院區的檔比對
+    if (NO_CARD.includes(s) && st !== 'full') {
+      const cov = st === 'part' ? ` · ${R.docsAt[s].size - R.part[s].length}/${R.docsAt[s].size} 位` : '';
+      return `<div class="tile nocard" title="沒有${s}的機構卡，拿不到${s}的報備檔"><span class="nm">${s}</span><small>無機構卡${cov}</small></div>`;
+    }
+    if (st === 'full') return `<div class="tile ok"${tip}>✓ ${s}<small>${up || '可比對'}</small></div>`;
+    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><i class="dt"></i>${s}<small>${all - R.part[s].length}/${all} 位${up ? ' · ' + up : ''}</small></div>`; }
+    if (st === 'none') return `<div class="tile need"${tip}><i class="dt"></i>${s}<small>還缺${up ? ' · ' + up : ''}</small></div>`;
+    if (up) return `<div class="tile ok"${tip}>✓ ${s}<small>${up}</small></div>`;   // 還沒拖時數檔，但這院區的報備檔已上傳
     return `<div class="tile${sys ? ' none' : ''}"><i class="dt"></i>${s}</div>`;
   }).join('');
-  const n = R ? R.sites.filter(s => siteState(s) === 'full').length : Object.values(sups).filter(S => S.full).length;
+  const upSites = SITE_ORDER.filter(s => (sups[s] && sups[s].full) || homes[s]).length;
+  const n = R ? R.sites.filter(s => siteState(s) === 'full').length : upSites;
   const tot = R ? R.sites.length : SITE_ORDER.length;
-  $('supHint').innerHTML = !sys && Object.keys(homes).length ? '先拖系統時數檔才會計算' : `<b>${n}</b>/ ${tot} 院區`;
+  $('supHint').innerHTML = R ? `<b>${n}</b>/ ${tot} 院區可以比對` : `已上傳 <b>${n}</b> 個院區`;
   $('supBar').style.width = Math.min(100, n / tot * 100) + '%';
-  $('legend').hidden = !sys;
+  $('legend').hidden = !sys && !upSites;
   const H = Object.entries(homes);
   $('homeHint').hidden = !H.length;
   $('homeHint').innerHTML = H.length ? `已拖「本院支援他院」：${H.map(([h, x]) => `<b>${h}</b>（${x.rows.length} 筆）`).join('、')} → 只比對專任在這些院區的醫師` : '';
