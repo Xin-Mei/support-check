@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 13:10';
+const APP_VERSION = '2026-11-11 14:57';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -292,9 +292,9 @@ async function addFiles(files) {
   for (const f of files) {
     try {
       const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      if (wb.SheetNames.includes('明細')) { readSystem(f.name, wb); msgs.push(`✓ 系統時數檔：${sys.y} 年 ${sys.m} 月`); continue; }
+      if (wb.SheetNames.includes('明細')) { readSystem(f.name, wb); msgs.push(`系統時數檔：${sys.y} 年 ${sys.m} 月`); continue; }
       const got = readSupport(f.name, wb);
-      if (got) { msgs.push(got.map(g => (g.startsWith('⚠') ? '' : '✓ ') + g).join('\n')); continue; }
+      if (got) { msgs.push(got.join('\n')); continue; }
       msgs.push(`⚠ 看不懂：${f.name}（不是系統時數檔，也找不到「支援機構名稱」欄）`);
     } catch (err) { msgs.push(`⚠ 讀不了：${f.name}（${err.message}）`); }
   }
@@ -613,7 +613,7 @@ function renderResult() {
   const cnt = s => LINES.filter(l => !l.skip && (s === '全部' || l.site === s)).length;
   $('sites').innerHTML = ['全部', ...R.sites].map(s => {
     const nf = s !== '全部' && R.noFile.includes(s), pt = s !== '全部' && !!R.part[s], c = cnt(s);
-    return `<button class="site${s === curSite ? ' on' : ''}" data-s="${s}">${s}<span class="c ${nf ? 'nofile' : c ? '' : 'zero'}">${nf ? '沒檔' : c || (pt ? '部分' : '✓')}</span></button>`;
+    return `<button class="site${s === curSite ? ' on' : ''}" data-s="${s}">${s}<span class="c ${nf ? 'nofile' : c ? '' : 'zero'}">${nf ? '沒檔' : c || (pt ? '部分' : '0')}</span></button>`;
   }).join('');
   $('sites').querySelectorAll('.site').forEach(b => b.onclick = () => { curSite = b.dataset.s; renderResult(); });
 
@@ -629,7 +629,7 @@ function renderResult() {
       continue;
     }
     if (pt) html += `<div class="card hint">還沒比對：${pt.join('、')}（要${s}的「他院支援本院」，或他們專任院區的「本院支援他院」）</div>`;
-    if (!L.length) { html += `<div class="card empty">${s}${pt ? '已比對的醫師' : '的支援看診'}都有報備 ✓</div>`; continue; }
+    if (!L.length) { html += `<div class="card empty">${s}${pt ? '已比對的醫師' : '的支援看診'}都有報備</div>`; continue; }
     html += '<div class="docs">';
     for (const doc of [...new Set(L.map(l => l.doc))]) {
       const D = L.filter(l => l.doc === doc);
@@ -646,7 +646,7 @@ function renderResult() {
     }
     html += '</div>';
   }
-  if (!html) html = `<div class="card empty">${R.sites.some(s => !R.noFile.includes(s)) ? '已比對的都有報備 ✓' : '回到 ① 把各院區的報備檔拖進來就會開始比對'}</div>`;
+  if (!html) html = `<div class="card empty">${R.sites.some(s => !R.noFile.includes(s)) ? '已比對的都有報備' : '回到 ① 把各院區的報備檔拖進來就會開始比對'}</div>`;
   $('view').innerHTML = html;
   $('view').querySelectorAll('.ln').forEach(el => {
     const l = LINES[+el.dataset.i];
@@ -722,7 +722,7 @@ function renderSave() {
     S.map(x => `<tr><td>${x.s}</td><td>${x.n}</td>${x.has ? `<td class="ok">${x.ok}</td><td class="${x.miss ? 'bad' : 'ok'}">${x.miss}</td><td>${x.single}</td><td>${x.skip}</td>${x.part ? `<td class="warnc" title="還沒比對：${esc(R.part[x.s].join('、'))}">部分</td>` : '<td class="ok">有</td>'}`
       : '<td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="mute">—</td><td class="bad">還沒有（不會存）</td>'}</tr>`).join('');
   $('saveCloud').disabled = !cloudOk || !S.some(x => x.has);
-  $('savedMsg').innerHTML = (savedAt ? `<span class="saved">✓ ${savedAt} 已存到雲端</span>` : '') +
+  $('savedMsg').innerHTML = (savedAt ? `<span class="saved">${savedAt} 已存到雲端</span>` : '') +
     (needHint() ? `<div class="hint" style="margin-top:6px">${esc(needHint())}。<br>之後補到檔再存時，要把這次的檔一起拖進來（雲端會用新的整份換掉那個院區這個月的紀錄）。</div>` : '');
   $('sheetLink').href = SHEET_URL;
   // 歷月紀錄：月份 × 院區 的待補天數
@@ -731,7 +731,7 @@ function renderSave() {
     const sites = SITE_ORDER.filter(s => history.some(r => r[1] === s));
     $('histTable').innerHTML = `<tr><th>月份</th>${sites.map(s => `<th>${s}</th>`).join('')}<th>合計</th></tr>` + months.map(m => {
       let tot = 0;
-      const tds = sites.map(s => { const r = history.find(x => x[0] === m && x[1] === s); if (!r) return '<td class="mute">—</td>'; const v = +r[4] || 0; tot += v; return `<td class="${v ? 'bad' : 'ok'}">${v || '✓'}</td>`; }).join('');
+      const tds = sites.map(s => { const r = history.find(x => x[0] === m && x[1] === s); if (!r) return '<td class="mute">—</td>'; const v = +r[4] || 0; tot += v; return `<td class="${v ? 'bad' : 'ok'}">${v}</td>`; }).join('');
       return `<tr><td>${m}</td>${tds}<td class="${tot ? 'bad' : 'ok'}">${tot}</td></tr>`;
     }).join('');
   } else if (cloudOk) $('histTable').innerHTML = '<tr><td class="hint">雲端還沒有紀錄，存第一次之後就會出現</td></tr>';
