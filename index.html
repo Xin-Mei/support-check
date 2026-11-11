@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 12:06';
+const APP_VERSION = '2026-11-11 12:26';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -544,7 +544,7 @@ function render() {
   $('sum').innerHTML = !sys && !hasSup ? '<span class="need">還沒有系統時數檔、報備檔</span>'
     : !sys ? `報備檔已上傳 ・ <span class="need">還差系統時數檔</span>`
     : !hasSup ? `${sys.y} 年 ${sys.m} 月時數檔已上傳 ・ <span class="need">還差報備檔</span>`
-    : `${sys.y} 年 ${sys.m} 月 ・ 可以比對 ${R.sites.filter(s => siteState(s) === 'full').length} 個院區` + (Object.keys(R.part).length ? ` ・ 部分 ${Object.keys(R.part).length} 個` : '') + (R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '');
+    : `${sys.y} 年 ${sys.m} 月 ・ 全部可比對 ${R.sites.filter(s => siteState(s) === 'full').length} 個院區` + (Object.keys(R.part).length ? ` ・ 部分可比對 ${Object.keys(R.part).length} 個` : '') + (R.noFile.length ? ` ・ 還缺 ${R.noFile.length} 個` : '');
   if (page === 1) renderUpload();
   if (page === 2) renderResult();
   if (page === 3) renderSave();
@@ -576,7 +576,10 @@ function renderUpload() {
   const upSites = SITE_ORDER.filter(s => (sups[s] && sups[s].full) || homes[s]).length;
   const n = R ? R.sites.filter(s => siteState(s) === 'full').length : upSites;
   const tot = R ? R.sites.length : SITE_ORDER.length;
-  $('supHint').innerHTML = R ? `<b>${n}</b>/ ${tot} 院區可以比對` : `已上傳 <b>${n}</b> 個院區`;
+  // 「全部可比對」＝來這院區支援的醫師每一位都比得到；「部分」＝有幾位比不到（不算沒報備），其他照樣比對（小玫 11/11 怕誤會成沒比對）
+  const nPart = R ? R.sites.filter(s => siteState(s) === 'part').length : 0, nNone = R ? R.sites.filter(s => siteState(s) === 'none').length : 0;
+  $('supHint').innerHTML = R ? `全部可比對 <b>${n}</b> 個院區` + (nPart ? `・部分可比對 <b>${nPart}</b> 個` : '') + (nNone ? `・還缺 <b>${nNone}</b> 個` : '')
+    : `已上傳 <b>${n}</b> 個院區`;
   $('supBar').style.width = Math.min(100, n / tot * 100) + '%';
   $('legend').hidden = !sys && !upSites;
   const H = Object.entries(homes);
