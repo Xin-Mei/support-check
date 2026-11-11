@@ -24,7 +24,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto
 header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
 header .in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand img { width: 44px; height: 44px; border-radius: 50%; }
+.brand img { display: block; width: 44px; height: 44px; border-radius: 50%; position: relative; top: 2.3px; }   /* 兩行字的筆畫重心比框框低，logo 跟著往下 2.3px（在她的 Chrome 量的） 才看起來對齊（小玫 11/11） */
+.brand > a { display: block; line-height: 0; }   /* 線上版 logo 包了回工作台的連結，不能讓連結的行高把 logo 往上推 */
 .brand .t1 { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .brand .t1 .zh { font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: .12em; }
 .brand .t1 .sep { width: 1px; height: 10px; background: #CFC6BB; }
@@ -229,7 +230,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 16:07';
+const APP_VERSION = '2026-11-11 16:21';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
