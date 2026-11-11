@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 12:51';
+const APP_VERSION = '2026-11-11 13:02';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -428,13 +428,13 @@ function compute() {
       const hit = [...(supDocs[site] || [])].filter(d => maskMatch(mk, d));
       if (hit.length > 1) warns.push(`${site}：報備檔的「${mk}」同時對得上 ${hit.join('、')}，請人工確認`);
     }
-    if (S.full && !inMonth([...S.rows.values()])) warns.push(`${site}：報備檔裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？（${site}的結果先不要用）`);
+    if (S.full && S.rows.size && !inMonth([...S.rows.values()]))   /* 空檔、只有外面機構＝這月本來就沒有，不提醒（小玫 11/11） */ warns.push(`${site}：報備檔裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？（${site}的結果先不要用）`);
     const bad = [...S.rows.values()].filter(r => !valid(r));
     if (bad.length) warns.push(`${site}：有 ${bad.length} 筆報備沒有核准日期或是取消，不算數（${[...new Set(bad.map(r => r.kind || '沒核准'))].join('、')}）`);
     if (S.full && sys.sites.length && !sys.sites.includes(site)) warns.push(`報備檔的院區「${site}」在系統時數檔裡找不到`);
   }
   for (const [h, H] of Object.entries(homes)) {
-    if (!inMonth(H.rows)) warns.push(`${h}本院支援他院：檔案裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？`);
+    if (H.rows.length && !inMonth(H.rows)) warns.push(`${h}本院支援他院：檔案裡沒有 ${sys.m} 月的報備，是不是下載到別的月份？`);
     if (!Object.values(homeOf).some(S => S.has(h))) warns.push(`${h}本院支援他院：系統時數檔這個月沒有專任在${h}的醫師，這份檔用不到`);
   }
   for (const v of visits) {
