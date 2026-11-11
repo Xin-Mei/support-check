@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 11:48';
+const APP_VERSION = '2026-11-11 12:06';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -391,6 +391,18 @@ let notes = {};
 try { notes = JSON.parse(ls.get(NOTE_KEY) || '{}'); } catch { notes = {}; }
 const saveNotes = () => ls.set(NOTE_KEY, JSON.stringify(notes));
 
+// EIP 排班的醫師主要院區（公開 API，免登入）：時數檔這個月沒有專任的醫師（每一節都是支援）用這個當專任院區（小玫 11/11）
+let MAIN = {};
+const mainOf = doc => MAIN[doc] || (Object.entries(MAIN).find(([n]) => n.length === doc.length && [...n].every((c, i) => c === doc[i] || PUA.test(doc[i]))) || [])[1] || '';
+fetch('https://erp.drking.com.tw/api/v1/doctor-board/doctors').then(r => r.json()).then(j => {
+  for (const d of (j && j.data && j.data.doctors) || []) {
+    const site = siteOf(d.branchName);
+    if (!d.branchName || !SITE_ORDER.includes(site)) continue;
+    for (const n of [d.name, d.shortName]) if (n && String(n).trim()) MAIN[String(n).trim()] = site;
+  }
+  if (sys) render();
+}).catch(() => {});   // 讀不到就照舊：只是少了補專任，其他比對不受影響
+
 function compute() {
   const warns = [], out = [];
   const visits = sys.visits.filter(v => v.role === '支援' && v.y === sys.y && v.m === sys.m);
@@ -401,6 +413,7 @@ function compute() {
   // 醫師的專任院區＝這個月系統裡身分＝專任的院區（本院支援他院檔只能核對這些醫師）
   const homeOf = {};
   for (const v of sys.visits) if (v.role === '專任' && v.y === sys.y && v.m === sys.m) (homeOf[v.doc] ||= new Set()).add(v.site);
+  for (const v of sys.visits) if (!homeOf[v.doc]) { const h = mainOf(v.doc); if (h) homeOf[v.doc] = new Set([h]); }   // 沒有專任 → EIP 主要院區
   const covered = v => !!(sups[v.site] && sups[v.site].full) || [...(homeOf[v.doc] || [])].some(h => homes[h]);
   const m0 = dayAbs(sys.y, sys.m, 1), m1 = dayAbs(sys.m === 12 ? sys.y + 1 : sys.y, sys.m % 12 + 1, 1);
   const inMonth = L => L.some(r => r.e > m0 && r.s < m1);
@@ -466,7 +479,7 @@ function needHint() {
     const docs = [...new Set(un.filter(r => R.homeOf[r.doc] && R.homeOf[r.doc].has(h)).map(r => r.doc))];
     parts.push(`${h}沒有機構卡，專任${h}的${docs.join('、')}沒辦法比對`);
   }
-  if (noHome.size) parts.push([...noHome].map(([d, ss]) => `${d}（沒有專任院區）要 ${[...ss].sort(bySite).join('、')} 的「他院支援本院」`).join('；'));
+  if (noHome.size) parts.push([...noHome].map(([d, ss]) => `${d}（時數檔和 EIP 都沒有專任院區）要 ${[...ss].sort(bySite).join('、')} 的「他院支援本院」`).join('；'));
   return `還有 ${un.length} 節沒比對（不會算成沒報備）：${parts.join('；')}`;
 }
 // 這院區用到哪些報備檔（存雲端、Excel 說明用）
