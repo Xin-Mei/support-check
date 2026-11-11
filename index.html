@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 12:35';
+const APP_VERSION = '2026-11-11 12:48';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -405,6 +405,12 @@ fetch('https://erp.drking.com.tw/api/v1/doctor-board/doctors').then(r => r.json(
 
 function compute() {
   const warns = [], out = [];
+  // 時數檔匯出的亂碼字（例：高國峯的「峯」變私用區字）→ 用 EIP 醫師名單裡唯一對得上的名字補回來（小玫 11/11）
+  const fixed = {};
+  for (const v of sys.visits) if (PUA.test(v.doc)) {
+    if (!(v.doc in fixed)) { const c = Object.keys(MAIN).filter(n => n.length === v.doc.length && [...n].every((ch, i) => ch === v.doc[i] || PUA.test(v.doc[i]))); fixed[v.doc] = c.length === 1 ? c[0] : v.doc; }
+    v.doc = fixed[v.doc];
+  }
   const visits = sys.visits.filter(v => v.role === '支援' && v.y === sys.y && v.m === sys.m);
   const garbled = [...new Set(sys.visits.map(v => v.doc).filter(n => PUA.test(n)))];
   if (garbled.length) warns.push(`系統時數檔有醫師名字是亂碼字：${garbled.map(n => n.replace(PUA, '□')).join('、')}（□ 那個字先當作對得上，請資訊長修正）`);
