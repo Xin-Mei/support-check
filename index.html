@@ -14,7 +14,8 @@
 :root {
   --bg: #F7F5F2; --card: #fff; --ink: #3E3830; --muted: #857868; --line: #E0DCD7; --line-soft: #EEEBE7;
   --brand: #514A40; --brand-2: #8C7B67; --soft: #F3EFEA; --hover: #F9F7F4;
-  --ok: #2F6B58; --ok-bg: #D5E8DF; --bad: #9A5A4C; --bad-bg: #F1D9D2; --warn: #9B6B1E; --warn-bg: #F6E9CF; --gold: #E8B54A;
+  --ok: #2F6B58; --ok-bg: #D5E8DF;
+  --up: #5E4F3F; --up-bg: #EBE2D6; --up-line: #D3C4B1;   /* 上傳區「已上傳」用奶茶色，不用綠色（小玫 11/11） */ --bad: #9A5A4C; --bad-bg: #F1D9D2; --warn: #9B6B1E; --warn-bg: #F6E9CF; --gold: #E8B54A;
   --r: 16px; --shadow: 0 1px 2px rgba(81,74,64,.05), 0 6px 18px rgba(81,74,64,.06);
 }
 * { box-sizing: border-box; }
@@ -36,7 +37,7 @@ header .in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: fle
 .st:disabled { cursor: default; opacity: .55; }
 .st i { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); font: 700 13px/1 'Segoe UI', Arial, sans-serif; color: var(--muted); background: #fff; padding-bottom: 2px; }   /* 字型的數字天生偏下約 1px，底下多留 2px 讓數字上下置中（小玫 11/9）*/
 .st.on { color: var(--brand); font-weight: 700; } .st.on i { background: var(--brand); border-color: var(--brand); color: #fff; }
-.st.done i { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok); }
+.st.done i { background: var(--up-bg); border-color: var(--up-bg); color: var(--up); }
 .stepper .sep { width: 26px; height: 2px; background: var(--line); }
 main { max-width: 1180px; margin: 0 auto; padding: 26px 24px 120px; }
 .page { display: none; } .page.on { display: block; }
@@ -56,23 +57,22 @@ button:disabled { opacity: .45; cursor: default; }
 /* 步驟 1：檔案狀態 */
 .sysfile { display: flex; align-items: center; gap: 14px; }
 .sysfile .ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: var(--soft); color: var(--muted); }
-.sysfile.ok .ic { background: var(--ok-bg); color: var(--ok); }
+.sysfile.ok .ic { background: var(--up-bg); color: var(--up); }
 .sysfile b { font-size: 16px; }
 .suphead { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .suphead h2 { margin: 0; white-space: nowrap; }
 .prog { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: hidden; }
-.prog i { display: block; height: 100%; border-radius: 99px; background: var(--ok); transition: width .3s; }
+.prog i { display: block; height: 100%; border-radius: 99px; background: var(--brand-2); transition: width .3s; }
 .cnt { white-space: nowrap; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .cnt b { font-size: 20px; color: var(--brand); margin-right: 2px; }
 .tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-.tile { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 56px; padding: 8px 12px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15px; }
-.tile .nm { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 8px 10px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15.5px; text-align: center; }
+.tile .nm { white-space: nowrap; letter-spacing: .12em; }
 .tile .dt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #D3CBC1; }
-.tile small { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 14px; }
-.tile.ok small, .tile.nocard small { padding-left: 0; }
-.tile.ok { border: 1px solid transparent; background: var(--ok-bg); color: var(--ok); font-weight: 700; }
+.tile small { max-width: 100%; font-size: 11.5px; font-weight: 500; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.tile.ok { border: 1px solid transparent; background: var(--up-bg); color: var(--up); font-weight: 700; }
 .tile.ok .dt { display: none; }
-.tile.need { border: 1px solid #E3CFA6; background: #fff; color: var(--ink); font-weight: 700; }
+.tile.need { border: 1px solid #E3CFA6; background: #FDF7EC; color: var(--ink); font-weight: 700; }
 .tile.need .dt { background: var(--warn); } .tile.need small { color: var(--warn); }
 .tile.none { opacity: .5; }
 .tile.nocard { border: 1px solid #E2DED9; background: #EEECE9; color: #A39A90; cursor: help; }
@@ -80,12 +80,12 @@ button:disabled { opacity: .45; cursor: default; }
 .legend .l5::before { background: #EEECE9; border: 1px solid #E2DED9; }
 .legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
 .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-.legend .l1::before { background: var(--ok-bg); border: 1px solid #BFD8CC; }
-.legend .l2::before { background: #fff; border: 1px solid #E3CFA6; }
+.legend .l1::before { background: var(--up-bg); border: 1px solid var(--up-line); }
+.legend .l2::before { background: #FDF7EC; border: 1px solid #E3CFA6; }
 .legend .l3::before { border: 1px dashed #DCD5CC; }
-.tile.part { border: 1px solid #BFD8CC; background: #fff; color: var(--ok); font-weight: 700; }
-.tile.part .dt { background: var(--ok); } .tile.part small { color: var(--ok); }
-.legend .l4::before { background: #fff; border: 1px solid #BFD8CC; }
+.tile.part { border: 1px solid var(--up-line); background: #fff; color: var(--up); font-weight: 700; }
+.tile.part small { color: var(--brand-2); }
+.legend .l4::before { background: #fff; border: 1px solid var(--up-line); }
 /* 步驟 2：結果 */
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
 .kpi { margin: 0; padding: 16px 18px; }
@@ -226,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 11:25';
+const APP_VERSION = '2026-11-11 11:48';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -546,18 +546,19 @@ function renderUpload() {
   $('tiles').innerHTML = SITE_ORDER.concat(Object.keys(sups).filter(s => !SITE_ORDER.includes(s))).map(s => {
     const st = siteState(s), S = sups[s];
     // 這個院區上傳了哪種報備檔：他院＝「他院支援本院」、本院＝「本院支援他院」
-    const up = [S && S.full ? '他院✓' : '', homes[s] ? '本院✓' : ''].filter(Boolean).join(' ');
-    const tip = up ? ` title="已上傳：${up.replace(/✓/g, '').split(' ').map(x => x === '他院' ? '他院支援本院' : '本院支援他院').join('、')}"` : '';
+    const kinds = [S && S.full ? '他院支援本院' : '', homes[s] ? '本院支援他院' : ''].filter(Boolean);
+    const up = kinds.length === 2 ? '兩種都有' : kinds[0] || '';
+    const tip = up ? ` title="已上傳：${kinds.join('、')}"` : '';
     // 沒有機構卡的院區（樹林）：拿不到這院區的報備檔 → 灰色；別院區來支援的醫師還是能用他們專任院區的檔比對
     if (NO_CARD.includes(s) && st !== 'full') {
       const cov = st === 'part' ? ` · ${R.docsAt[s].size - R.part[s].length}/${R.docsAt[s].size} 位` : '';
       return `<div class="tile nocard" title="沒有${s}的機構卡，拿不到${s}的報備檔"><span class="nm">${s}</span><small>無機構卡${cov}</small></div>`;
     }
-    if (st === 'full') return `<div class="tile ok"${tip}><span class="nm">✓ ${s}</span><small>${up || '可比對'}</small></div>`;
-    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><span class="nm"><i class="dt"></i>${s}</span><small>${all - R.part[s].length}/${all} 位${up ? ' · ' + up : ''}</small></div>`; }
-    if (st === 'none') return `<div class="tile need"${tip}><span class="nm"><i class="dt"></i>${s}</span><small>還缺${up ? ' · ' + up : ''}</small></div>`;
-    if (up) return `<div class="tile ok"${tip}><span class="nm">✓ ${s}</span><small>${up}</small></div>`;   // 還沒拖時數檔，但這院區的報備檔已上傳
-    return `<div class="tile${sys ? ' none' : ''}"><span class="nm"><i class="dt"></i>${s}</span></div>`;
+    if (st === 'full') return `<div class="tile ok"${tip}><span class="nm">${s}</span><small>${up || '可比對'}</small></div>`;
+    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><span class="nm">${s}</span><small>${all - R.part[s].length}/${all} 位可比對</small></div>`; }
+    if (st === 'none') return `<div class="tile need"${tip}><span class="nm">${s}</span><small>還缺報備檔</small></div>`;
+    if (up) return `<div class="tile ok"${tip}><span class="nm">${s}</span><small>${up}</small></div>`;   // 還沒拖時數檔，但這院區的報備檔已上傳
+    return `<div class="tile${sys ? ' none' : ''}"><span class="nm">${s}</span></div>`;
   }).join('');
   const upSites = SITE_ORDER.filter(s => (sups[s] && sups[s].full) || homes[s]).length;
   const n = R ? R.sites.filter(s => siteState(s) === 'full').length : upSites;
