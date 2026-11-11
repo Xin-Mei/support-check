@@ -68,7 +68,7 @@ button:disabled { opacity: .45; cursor: default; }
 .cnt b { font-size: 20px; color: var(--brand); margin-right: 2px; }
 .tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 8px 10px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15.5px; text-align: center; }
-.tile .nm { white-space: nowrap; letter-spacing: .12em; }
+.tile .nm { white-space: nowrap; letter-spacing: .12em; padding-left: .12em; }   /* 字距會在最後一個字後面多留一格，左邊補同樣寬度，字才真的置中 */
 .tile .dt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #D3CBC1; }
 .tile small { max-width: 100%; font-size: 11.5px; font-weight: 500; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
 .tile.ok { border: 1px solid transparent; background: var(--up-bg); color: var(--up); font-weight: 700; }
@@ -97,10 +97,12 @@ button:disabled { opacity: .45; cursor: default; }
 .kpi.bad .v { color: var(--bad); } .kpi.warn .v { color: var(--warn); } .kpi.ok .v { color: var(--ok); }
 .warns { border-left: 5px solid var(--gold); }
 .warns li { margin: 3px 0; font-size: 14px; }
-.sites { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
-.site { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 14px; cursor: pointer; font: inherit; font-size: 14px; color: var(--ink); }
+.sites { display: grid; grid-template-columns: 112px repeat(7, 1fr); gap: 8px; margin: 4px 0 18px; }   /* 「全部」佔左邊兩列高，14 院區排成 7×2，跟 ① 的格子對齊（小玫 11/11） */
+.site { display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 12px; cursor: pointer; font: inherit; font-size: 14.5px; color: var(--ink); letter-spacing: .08em; white-space: nowrap; }
+.site[data-s="全部"] { grid-row: span 2; flex-direction: column; justify-content: center; gap: 6px; font-weight: 700; padding-left: calc(12px + .08em); }
+.site .c { margin-left: 0 !important; letter-spacing: 0; }
 .site .c { display: inline-block; min-width: 20px; margin-left: 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 99px; padding: 0 6px; text-align: center; }
-.site .c.zero { background: var(--ok-bg); color: var(--ok); }
+.site .c.zero { background: var(--up-bg); color: var(--up); }
 .site .c.nofile { background: var(--soft); color: var(--muted); }
 .site.on { border-color: var(--brand); background: var(--brand); color: #fff; font-weight: 700; }
 .docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 14px; }
@@ -145,7 +147,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 .bar .primary { padding: 10px 24px; border-radius: 12px; font-size: 15px; }
 .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 12px; font-size: 14px; z-index: 20; opacity: 0; transition: .2s; pointer-events: none; max-width: 80vw; white-space: pre-line; line-height: 1.75; }
 .toast.on { opacity: 1; pointer-events: auto; cursor: pointer; }   /* 點一下就關（小玫 11/11：到 ② 還擋住畫面） */
-@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } .tiles { grid-template-columns: repeat(4, 1fr); } .docs { grid-template-columns: 1fr; } .stepper .lb { display: none; } }
+@media (max-width: 900px) { .sites { grid-template-columns: repeat(4, 1fr); } .site[data-s="全部"] { grid-row: auto; flex-direction: row; } .kpis { grid-template-columns: repeat(2, 1fr); } .tiles { grid-template-columns: repeat(4, 1fr); } .docs { grid-template-columns: 1fr; } .stepper .lb { display: none; } }
 </style>
 </head>
 <body>
@@ -227,7 +229,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 16:03';
+const APP_VERSION = '2026-11-11 16:07';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
