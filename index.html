@@ -65,16 +65,18 @@ button:disabled { opacity: .45; cursor: default; }
 .cnt { white-space: nowrap; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .cnt b { font-size: 20px; color: var(--brand); margin-right: 2px; }
 .tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-.tile { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15px; }
+.tile { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 56px; padding: 8px 12px; border-radius: 10px; border: 1px dashed #DCD5CC; color: var(--muted); font-size: 15px; }
+.tile .nm { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .tile .dt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #D3CBC1; }
-.tile small { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.tile small { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 14px; }
+.tile.ok small, .tile.nocard small { padding-left: 0; }
 .tile.ok { border: 1px solid transparent; background: var(--ok-bg); color: var(--ok); font-weight: 700; }
 .tile.ok .dt { display: none; }
 .tile.need { border: 1px solid #E3CFA6; background: #fff; color: var(--ink); font-weight: 700; }
 .tile.need .dt { background: var(--warn); } .tile.need small { color: var(--warn); }
 .tile.none { opacity: .5; }
 .tile.nocard { border: 1px solid #E2DED9; background: #EEECE9; color: #A39A90; cursor: help; }
-.tile.nocard .nm { white-space: nowrap; } .tile.nocard small { font-size: 11.5px; }
+.tile.nocard small { font-size: 11.5px; }
 .legend .l5::before { background: #EEECE9; border: 1px solid #E2DED9; }
 .legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
 .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
@@ -224,7 +226,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 00:30';
+const APP_VERSION = '2026-11-11 11:25';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
@@ -244,6 +246,15 @@ const bySite = (a, b) => (SITE_ORDER.indexOf(a) + 1 || 99) - (SITE_ORDER.indexOf
 
 // 「大溪金鶯診所」→大溪、「大溪院區」→大溪；只寫「金鶯診所」的是桃園（總院）
 const siteOf = s => String(s || '').replace(/\s/g, '').replace(/金鶯診所$/, '').replace(/院區$/, '') || '桃園';
+// 衛福部機構代碼 → 院區（鶯歌、桃園的名稱都只寫「金鶯診所」，要靠代碼分；11/11 從 12 院區報備檔整理）
+const CODE_SITE = {
+  '3531081823': '鶯歌', '3531072682': '三樹', '3532018520': '桃園', '3531133911': '土城', '3532082888': '八德', '3532091930': '龍潭', '3532031970': '大溪',
+  '3532052719': '大竹', '3532082931': '大湳', '3532102492': '平鎮', '3532042366': '埔心', '3532121906': '觀音', '3532028428': '龍岡', '3531072575': '樹林',
+};
+// 報備檔的機構 → 院區：先看代碼，代碼不認得才看名稱（不是金鶯＝''）
+const supSite = (code, name) => CODE_SITE[String(code ?? '').trim()] || (/金鶯/.test(String(name)) ? siteOf(name) : '');
+// 檔名開頭的院區（例：大竹1151111_本院支援他院.xlsx；空檔、全是外面機構時靠這個認院區）
+const siteInName = name => SITE_ORDER.find(x => name.replace(/^.*[\/]/, '').startsWith(x)) || '';
 const hhmm = t => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
 const fm = x => { x = ((x % 1440) + 1440) % 1440; return Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0'); };
 const dayAbs = (y, m, d) => Date.UTC(y + 1911, m - 1, d) / 60000;   // 民國年月日 → 分鐘
@@ -324,37 +335,50 @@ function readSystem(name, wb) {
 // 支援到非金鶯的機構（例：淨妍醫美）不用核對，跳過
 function readSupport(name, wb) {
   const rows = [];
-  let other = 0;
+  let other = 0, found = false;
+  const froms = new Set();   // 原機構（含支援外面機構的那幾筆，所以只有外面機構也認得出本院）
   for (const sn of wb.SheetNames) {
     const R = rowsOf(wb.Sheets[sn]);
     const hi = R.slice(0, 8).findIndex(r => r.some(v => String(v).includes('支援機構名稱')));
     if (hi < 0) continue;
-    const c = colMap(R[hi], { id: ['案件編號'], kind: ['案件類別'], ok: ['核準日期', '核准日期'], name: ['姓名'], s: ['支援開始時間'], e: ['支援結束時間'], to: ['支援機構名稱'], from: ['原機構名稱'] });
+    found = true;
+    const c = colMap(R[hi], { id: ['案件編號'], kind: ['案件類別'], ok: ['核準日期', '核准日期'], name: ['姓名'], s: ['支援開始時間'], e: ['支援結束時間'],
+      to: ['支援機構名稱'], toCode: ['支援機構代碼'], from: ['原機構名稱'], fromCode: ['原機構代碼'] });
     for (const r of R.slice(hi + 1)) {
       const s = supTime(r[c.s]), e = supTime(r[c.e]);
       if (s == null || e == null || !r[c.name]) continue;
-      if (!/金鶯/.test(String(r[c.to]))) { other++; continue; }
-      rows.push({ site: siteOf(r[c.to]), from: c.from >= 0 && /金鶯/.test(String(r[c.from])) ? siteOf(r[c.from]) : '',
-        id: r[c.id], kind: String(r[c.kind] || '').trim(), ok: String(r[c.ok] || '').trim(), name: String(r[c.name]).trim(), s, e });
+      const from = supSite(r[c.fromCode], r[c.from]);
+      if (from) froms.add(from);
+      const to = supSite(r[c.toCode], r[c.to]);
+      if (!to) { other++; continue; }
+      rows.push({ site: to, from, id: r[c.id], kind: String(r[c.kind] || '').trim(), ok: String(r[c.ok] || '').trim(), name: String(r[c.name]).trim(), s, e });
     }
   }
-  if (!rows.length) return other ? [`⚠ ${name}：裡面 ${other} 筆都是支援其他機構（不是金鶯院區），不用核對`] : null;
-  const froms = new Set(rows.map(r => r.from)), tos = new Set(rows.map(r => r.site));
-  const isHome = /本院支援他院/.test(name) ? true : /他院支援本院/.test(name) ? false : froms.size === 1 && !froms.has('') && tos.size > 1;
+  if (!found) return null;
+  const tos = new Set(rows.map(r => r.site));
+  const isHome = /本院支援他院/.test(name) ? true : /他院支援本院/.test(name) ? false : froms.size === 1 && tos.size > 1;
+  const inName = siteInName(name);
+  const tail = other ? `（另 ${other} 筆是支援其他機構，不用核對）` : '';
   const add = r => {
     const S = sups[r.site] ||= { files: new Set(), full: false, rows: new Map() };
     S.rows.set([r.id, r.name, r.s, r.e].join('|'), r);   // 同一份拖兩次、兩種檔有同一筆都不會重複
     return S;
   };
   if (isHome) {
-    const home = [...froms][0] || '?';
+    const home = froms.size === 1 ? [...froms][0] : inName;
+    if (!home) return [`⚠ ${name}：看不出是哪個院區的「本院支援他院」，檔名前面請加院區（例：大竹${name}）`];
     const H = homes[home] ||= { files: new Set(), rows: [] };
     H.files.add(name);
     for (const r of rows) { add(r); if (!H.rows.some(x => x.id === r.id && x.s === r.s && x.e === r.e)) H.rows.push(r); }
-    return [`${home}「本院支援他院」${rows.length} 筆${other ? `（另 ${other} 筆是支援其他機構，不用核對）` : ''}`];
+    return [rows.length ? `${home}「本院支援他院」${rows.length} 筆${tail}`
+      : other ? `${home}「本院支援他院」：${other} 筆都是支援其他機構（不是金鶯院區），不用核對`
+      : `${home}「本院支援他院」：這個月沒有支援紀錄`];
   }
+  const home = tos.size === 1 ? [...tos][0] : tos.size ? '' : inName;
+  if (!rows.length && !home) return [`⚠ ${name}：看不出是哪個院區的「他院支援本院」，檔名前面請加院區`];
   for (const r of rows) { const S = add(r); S.files.add(name); S.full = true; }
-  return [`${[...tos].join('、')}「他院支援本院」${rows.length} 筆${other ? `（另 ${other} 筆是支援其他機構，不用核對）` : ''}`];
+  if (home) { const S = sups[home] ||= { files: new Set(), full: false, rows: new Map() }; S.files.add(name); S.full = true; }   // 這個月沒人來支援也算有檔
+  return [rows.length ? `${[...tos].join('、')}「他院支援本院」${rows.length} 筆${tail}` : `${home}「他院支援本院」：這個月沒有支援紀錄`];
 }
 
 // 有效的報備：要有核准日期，而且不是取消／撤銷／註銷
@@ -529,11 +553,11 @@ function renderUpload() {
       const cov = st === 'part' ? ` · ${R.docsAt[s].size - R.part[s].length}/${R.docsAt[s].size} 位` : '';
       return `<div class="tile nocard" title="沒有${s}的機構卡，拿不到${s}的報備檔"><span class="nm">${s}</span><small>無機構卡${cov}</small></div>`;
     }
-    if (st === 'full') return `<div class="tile ok"${tip}>✓ ${s}<small>${up || '可比對'}</small></div>`;
-    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><i class="dt"></i>${s}<small>${all - R.part[s].length}/${all} 位${up ? ' · ' + up : ''}</small></div>`; }
-    if (st === 'none') return `<div class="tile need"${tip}><i class="dt"></i>${s}<small>還缺${up ? ' · ' + up : ''}</small></div>`;
-    if (up) return `<div class="tile ok"${tip}>✓ ${s}<small>${up}</small></div>`;   // 還沒拖時數檔，但這院區的報備檔已上傳
-    return `<div class="tile${sys ? ' none' : ''}"><i class="dt"></i>${s}</div>`;
+    if (st === 'full') return `<div class="tile ok"${tip}><span class="nm">✓ ${s}</span><small>${up || '可比對'}</small></div>`;
+    if (st === 'part') { const all = R.docsAt[s].size; return `<div class="tile part" title="還沒比對：${esc(R.part[s].join('、'))}"><span class="nm"><i class="dt"></i>${s}</span><small>${all - R.part[s].length}/${all} 位${up ? ' · ' + up : ''}</small></div>`; }
+    if (st === 'none') return `<div class="tile need"${tip}><span class="nm"><i class="dt"></i>${s}</span><small>還缺${up ? ' · ' + up : ''}</small></div>`;
+    if (up) return `<div class="tile ok"${tip}><span class="nm">✓ ${s}</span><small>${up}</small></div>`;   // 還沒拖時數檔，但這院區的報備檔已上傳
+    return `<div class="tile${sys ? ' none' : ''}"><span class="nm"><i class="dt"></i>${s}</span></div>`;
   }).join('');
   const upSites = SITE_ORDER.filter(s => (sups[s] && sups[s].full) || homes[s]).length;
   const n = R ? R.sites.filter(s => siteState(s) === 'full').length : upSites;
