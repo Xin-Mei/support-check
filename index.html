@@ -58,6 +58,7 @@ button:disabled { opacity: .45; cursor: default; }
 .sysfile { display: flex; align-items: center; gap: 14px; }
 .sysfile .ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: var(--soft); color: var(--muted); }
 .sysfile.ok .ic { background: var(--up-bg); color: var(--up); }
+.sysfile .ic svg { transform: translate(.5px, 1px); }   /* 檔案圖示右上有折角，視覺上偏左上；用她的截圖量偏 0.5／1px，推回正中（小玫 11/11） */
 .sysfile b { font-size: 16px; }
 .suphead { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .suphead h2 { margin: 0; white-space: nowrap; }
@@ -226,7 +227,7 @@ table.t td.bad { color: var(--bad); font-weight: 700; } table.t td.ok { color: v
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '2026-11-11 14:57';
+const APP_VERSION = '2026-11-11 15:57';
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbw7_1bHKJ7loK497Cl1T8U5JfcEwNhbD5vC2TptJQbdnYAGReEVUT2ntDaNaaBO58CLEQ/exec';     // Apps Script 網頁應用程式網址（不是秘密；密碼另外在網頁上輸入）
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YdGI5QiJHPZZkdRcBpd9u8Wm3YAummoE6__nb1QAwCI/edit';
 if (!APP_VERSION.startsWith('__')) document.getElementById('verTag').textContent = '版本 ' + APP_VERSION;
